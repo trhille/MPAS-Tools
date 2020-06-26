@@ -40,7 +40,7 @@ for option in parser.option_list:
 options, args = parser.parse_args()
 
 print("  Source file:  {}".format(options.inputFile))
-print("  Destination MPASLI file to be modified:  {}".format(options.mpasFile))
+print("  Destination MPASLI file to be mod ified:  {}".format(options.mpasFile))
 
 print("  Interpolation method to be used:  {}".format(options.interpType))
 print("    (b=bilinear, d=barycentric, e=esmf)")
@@ -62,7 +62,7 @@ print('') # make a space in stdout before further output
 #----------------------------
 # Define which time levels you want to use in the two files! (0-based indexing in python)
 timelev = 0
-timelevout = 0
+timelevout = np.arange(0, 1)
 #----------------------------
 
 
@@ -206,7 +206,7 @@ def delaunay_interpolate(values, gridType):
 
 #----------------------------
 
-def interpolate_field(MPASfieldName):
+def interpolate_field(MPASfieldName, timelev):
 
     if fieldInfo[MPASfieldName]['gridType'] == 'x0' and options.interpType == 'e':
        assert "This CISM field is on the staggered grid, and currently this script does not support a second ESMF weight file for the staggered grid."
@@ -218,7 +218,7 @@ def interpolate_field(MPASfieldName):
        else:
            InputField = inputFile.variables[InputFieldName][:,:]
     elif filetype=='mpas':
-       if 'Time' in inputFile.variables[InputFieldName].dimensions:
+       if 'Time' in inputFile.variables[InputFieldName].dimensions or 'time' in inputFile.variables[InputFieldName].dimensions:
            InputField = inputFile.variables[InputFieldName][timelev,:]
        else:
            InputField = inputFile.variables[InputFieldName][:]
@@ -588,7 +588,10 @@ if filetype=='cism':
    fieldInfo['thickness'] =     {'InputName':'thk',  'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
    if not options.thicknessOnly:
      fieldInfo['bedTopography'] = {'InputName':'topg', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-     fieldInfo['sfcMassBal'] =    {'InputName':'acab', 'scalefactor':910.0/(3600.0*24.0*365.0)/1000.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Assuming default CISM density and mm/yr w.e. units for acab
+#     fieldInfo['sfcMassBal'] =    {'InputName':'acab', 'scalefactor':910.0/(3600.0*24.0*365.0)/1000.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Assuming default CISM density and mm/yr w.e. units for acab
+     fieldInfo['sfcMassBal'] =    {'InputName':'smb', 'scalefactor':910.0/(3600.0*24.0*365.0)/1000.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Assuming default CISM density and mm/yr w.e. units for acab
+     fieldInfo['sfcMassBalUncertainty'] =    {'InputName':'smb_std', 'scalefactor':910.0/(3600.0*24.0*365.0)/1000.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Assuming default CISM density and mm/yr w.e. units for acab
+
      fieldInfo['floatingBasalMassBal'] =    {'InputName':'subm', 'scalefactor':910.0/(3600.0*24.0*365.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Assuming default CISM density
      #fieldInfo['temperature'] =   {'InputName':'temp', 'scalefactor':1.0, 'offset':273.15, 'gridType':'x1', 'vertDim':True}
      fieldInfo['temperature'] =   {'InputName':'tempstag', 'scalefactor':1.0, 'offset':273.15, 'gridType':'x1', 'vertDim':True}  # pick one or the other
@@ -602,11 +605,11 @@ if filetype=='cism':
      fieldInfo['observedSurfaceVelocityUncertainty'] = {'InputName':'vErr', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedThicknessTendency'] = {'InputName':'dHdt', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedThicknessTendencyUncertainty'] = {'InputName':'dHdtErr', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-     fieldInfo['thicknessUncertainty'] = {'InputName':'thkErr', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-
+#     fieldInfo['thicknessUncertainty'] = {'InputName':'thkErr', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['thicknessUncertainty'] = {'InputName':'topgerr', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['ismip6shelfMelt_basin'] = {'InputName':'ismip6shelfMelt_basin', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['ismip6shelfMelt_deltaT'] = {'InputName':'ismip6shelfMelt_deltaT', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-
+      
 elif filetype=='mpas':
 
    fieldInfo['thickness'] =     {'InputName':'thickness',  'scalefactor':1.0, 'offset':0.0, 'gridType':'cell', 'vertDim':False}
@@ -625,42 +628,50 @@ elif filetype=='mpas':
      fieldInfo['observedThicknessTendency'] = {'InputName':'observedThicknessTendency', 'scalefactor':1.0, 'offset':0.0, 'gridType':'cell', 'vertDim':False}
      fieldInfo['observedThicknessTendencyUncertainty'] = {'InputName':'observedThicknessTendencyUncertainty', 'scalefactor':1.0, 'offset':0.0, 'gridType':'cell', 'vertDim':False}
      fieldInfo['thicknessUncertainty'] = {'InputName':'thicknessUncertainty', 'scalefactor':1.0, 'offset':0.0, 'gridType':'cell', 'vertDim':False}
-
+     fieldInfo['sfcMassBalUncertainty'] = {'InputName':'smb_std_vector', 'scalefactor':910.0/(3600.0*24.0*365.0)/1000.0, 'offset':0.0, 'gridType':'cell', 'vertDim':False}
+     fieldInfo['ismip6Runoff'] = {'InputName':'runoff_vector', 'scalefactor':1.0, 'offset':0.0, 'gridType':'cell', 'vertDim':False}
+     fieldInfo['ismip6_2dThermalForcing'] = {'InputName':'thermal_forcing_vector', 'scalefactor':1.0, 'offset':0.0, 'gridType':'cell', 'vertDim':False}
+     fieldInfo['ismip6aST'] = {'InputName':'aST_vector', 'scalefactor':1.0, 'offset':0.0, 'gridType':'cell', 'vertDim':False}
+     fieldInfo['ismip6aSMB'] = {'InputName':'aSMB_vector', 'scalefactor':1.0, 'offset':0.0, 'gridType':'cell', 'vertDim':False}
+     fieldInfo['ismip6refST'] = {'InputName':'ST_vector', 'scalefactor':1.0, 'offset':0.0, 'gridType':'cell', 'vertDim':False}
+     fieldInfo['externalWaterInput'] = {'InputName':'externalWaterInput_vector', 'scalefactor':1.0/(3600.0*24.0*365.0), 'offset':0.0, 'gridType':'cell', 'vertDim':False}
 #----------------------------
 
 
 #----------------------------
-# try each field.  If it exists in the input file, it will be copied.  If not, it will be skipped.
-for MPASfieldName in fieldInfo:
-    print('\n## {} ##'.format(MPASfieldName))
-
-    if not MPASfieldName in MPASfile.variables:
-       print("  Warning: Field '{}' is not in the destination file.  Skipping.".format(MPASfieldName))
-       continue  # skip the rest of this iteration of the for loop over variables
-
-    if not fieldInfo[MPASfieldName]['InputName'] in inputFile.variables:
-       print("  Warning: Field '{}' is not in the source file.  Skipping.".format(fieldInfo[MPASfieldName]['InputName']))
-       continue  # skip the rest of this iteration of the for loop over variables
-
-    start = time.clock()
-    if fieldInfo[MPASfieldName]['vertDim']:
-      MPASfield = interpolate_field_with_layers(MPASfieldName)
-    else:
-      MPASfield = interpolate_field(MPASfieldName)
-    end = time.clock(); print('  interpolation done in {}'.format(end-start))
-
-    # Don't allow negative thickness.
-    if MPASfieldName == 'thickness' and MPASfield.min() < 0.0:
-        MPASfield[MPASfield < 0.0] = 0.0
-        print('  removed negative thickness, new min/max: {} {}'.format(MPASfield.min(), MPASfield.max()))
-
-    # Now insert the MPAS field into the file.
-    if 'Time' in MPASfile.variables[MPASfieldName].dimensions:
-        MPASfile.variables[MPASfieldName][timelevout,:] = MPASfield  # Time will always be leftmost index
-    else:
-        MPASfile.variables[MPASfieldName][:] = MPASfield
-
-    MPASfile.sync()  # update the file now in case we get an error later
+# try each field and loop over time.  If it exists in the input file, it will be copied.  If not, it will be skipped
+for timelev in timelevout:
+    print("Time level {}".format(timelev))
+    for MPASfieldName in fieldInfo:
+        print('\n## {} ##'.format(MPASfieldName))
+    
+        if not MPASfieldName in MPASfile.variables:
+          # print("  Warning: Field '{}' is not in the destination file.  Skipping.".format(MPASfieldName))
+           continue  # skip the rest of this iteration of the for loop over variables
+    
+        if not fieldInfo[MPASfieldName]['InputName'] in inputFile.variables:
+           #print("  Warning: Field '{}' is not in the source file.  Skipping.".format(fieldInfo[MPASfieldName]['InputName']))
+           continue  # skip the rest of this iteration of the for loop over variables
+    
+       # start = time.clock()
+        if fieldInfo[MPASfieldName]['vertDim']:
+          MPASfield = interpolate_field_with_layers(MPASfieldName)
+        else:
+          MPASfield = interpolate_field(MPASfieldName, timelev)
+       # end = time.clock(); print('  interpolation done in {}'.format(end-start))
+    
+        # Don't allow negative thickness.
+        if MPASfieldName == 'thickness' and MPASfield.min() < 0.0:
+            MPASfield[MPASfield < 0.0] = 0.0
+            print('  removed negative thickness, new min/max: {} {}'.format(MPASfield.min(), MPASfield.max()))
+     
+        # Now insert the MPAS field into the file.
+        if 'Time' in MPASfile.variables[MPASfieldName].dimensions:
+            MPASfile.variables[MPASfieldName][timelev,:] = MPASfield  # Time will always be leftmost index
+        else:
+            MPASfile.variables[MPASfieldName][:] = MPASfield
+    
+MPASfile.sync()  # update the file now in case we get an error later
 
 
 # Update history attribute of netCDF file

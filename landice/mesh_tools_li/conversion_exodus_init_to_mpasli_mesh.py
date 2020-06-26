@@ -41,9 +41,9 @@ options, args = parser.parse_args()
 SEACAS_path = os.getenv('SEACAS')
 if SEACAS_path == None:
    #sys.path.append('/home/tzhang/Apps/seacas/lib')
-   #sys.path.append('/Users/trevorhillebrand/Documents/mpas/seacas/lib/')
+   sys.path.append('/Users/trevorhillebrand/Documents/mpas/seacas/lib/')
    #sys.path.append('/Users/mhoffman/software/seacas/install/lib')
-   sys.path.append('/usr/projects/climate/SHARED_CLIMATE/software/badger/trilinos/2018-12-19/gcc-6.4.0/openmpi-2.1.2/lib')  # path on LANL Badger/Grizzly
+   #sys.path.append('/usr/projects/climate/SHARED_CLIMATE/software/badger/trilinos/2018-12-19/gcc-6.4.0/openmpi-2.1.2/lib')  # path on LANL Badger/Grizzly
 else:
    sys.path.append(SEACAS_path+'/lib')
 
@@ -52,7 +52,7 @@ from exodus import exodus
 # Map and copy Exodus data to MPAS data
 
 # Create dictionary of variables that are supported by the script
-mpas_exodus_var_dic = {"beta":"basal_friction", "thickness":"ice_thickness",\
+mpas_exodus_var_dic = {"beta":"log_basal_friction", "thickness":"ice_thickness",\
                        "stiffnessFactor":"stiffening_factor", \
                        "basalTemperature":"temperature", \
                        "surfaceTemperature":"temperature", \
