@@ -20,6 +20,7 @@ f.set_auto_mask(False)
 rhoi = 910.
 s_per_day = 86400.
 
+deltat = np.gradient(f.variables["daysSinceStart"][:]) * s_per_day
 yr = f.variables["daysSinceStart"][:] / 365.
 
 thkAnnual = f.variables["thickness"][:]
@@ -34,9 +35,9 @@ areaCell = f.variables["areaCell"][:]
 cellAreaArray = np.tile(areaCell, (np.shape(calvingThickness)[0],1))
 
 HumboldtVol = np.sum(thkAnnual * cellAreaArray, axis=1)
-calvingVolFlux = np.sum(calvingThickness * cellAreaArray,axis=1) #m^3/yr
-faceMeltVolFlux = np.sum(faceMeltRateApplied, axis=1) * 3600. * 24. * 365. # m^3/yr
-sfcMassBalVolFlux = np.sum(sfcMassBal * cellAreaArray, axis=1) / 910. * 3600. * 24. * 365.
+calvingVolFlux = np.sum(calvingThickness * cellAreaArray,axis=1) #m^3
+faceMeltVolFlux = np.sum(faceMeltRateApplied, axis=1) * deltat # m^3
+sfcMassBalVolFlux = np.sum(sfcMassBal * cellAreaArray, axis=1) / 910. * deltat
 
 massBudget = sfcMassBalVolFlux - faceMeltVolFlux - calvingVolFlux
 
