@@ -29,14 +29,14 @@ calvingThickness = f.variables["calvingThickness"][:] # m
 xCell = f.variables["xCell"][:]
 areaCell = f.variables["areaCell"][:]
 
-humboldtMask = (xCell < -285704)
-humboldtMaskArray = np.tile(humboldtMask, (np.shape(calvingThickness)[0],1))
+#humboldtMask = (xCell < -285704)
+#humboldtMaskArray = np.tile(humboldtMask, (np.shape(calvingThickness)[0],1))
 cellAreaArray = np.tile(areaCell, (np.shape(calvingThickness)[0],1))
 
-HumboldtVol = np.sum(thkAnnual * humboldtMaskArray * cellAreaArray, axis=1)
-calvingVolFlux = np.sum(calvingThickness * humboldtMaskArray * cellAreaArray,axis=1) #m^3/yr
-faceMeltVolFlux = np.sum(faceMeltRateApplied * humboldtMaskArray, axis=1) * 3600. * 24. * 365. # m^3/yr
-sfcMassBalVolFlux = np.sum(sfcMassBal * humboldtMaskArray * cellAreaArray, axis=1) / 910. * 3600. * 24. * 365.
+HumboldtVol = np.sum(thkAnnual * cellAreaArray, axis=1)
+calvingVolFlux = np.sum(calvingThickness * cellAreaArray,axis=1) #m^3/yr
+faceMeltVolFlux = np.sum(faceMeltRateApplied, axis=1) * 3600. * 24. * 365. # m^3/yr
+sfcMassBalVolFlux = np.sum(sfcMassBal * cellAreaArray, axis=1) / 910. * 3600. * 24. * 365.
 
 massBudget = sfcMassBalVolFlux - faceMeltVolFlux - calvingVolFlux
 
