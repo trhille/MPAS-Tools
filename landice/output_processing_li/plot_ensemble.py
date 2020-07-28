@@ -29,6 +29,7 @@ rhosw = 1028.0
 print("** Gathering information.  (Invoke with --help for more details. All arguments are optional)")
 parser = OptionParser(description=__doc__)
 parser.add_option("-d", dest="ensembleDirs", help="directory containing ensemble members (strings separated by commas; no spaces)", metavar="FILENAME")
+parser.add_option("-b", dest="boundsDirs", help="directory containing ensemble members (strings separated by commas; no spaces)", metavar="FILENAME")
 parser.add_option("-v", dest="variableName", help="variable(s) to plot, separated by commas", default = "volumeAboveFloatation", metavar="FILENAME")
 parser.add_option("-c", dest="controlFiles", help="comma-separated paths to control run(s) to subtract from ensemble members", metavar="FILENAME")
 
@@ -40,6 +41,11 @@ if options.controlFiles:
     controlFiles = options.controlFiles.split(',') # split control files into list
 else:
     controlFiles = None
+    
+if options.boundsDirs:
+    boundsDirs = options.boundsDirs.split(',') # split control files into list
+else:
+    boundsDirs = None
 
 print("Using ice density of {} kg/m3".format(rhoi))
 print("Using seawater density of {} kg/m3".format(rhosw))
@@ -55,15 +61,42 @@ linestyleIndex = 0 # initialize for loop
 
 # create axes to plot into
 varFig, varAx = plt.subplots(1,1)
-ratioFig, ratioAx = plt.subplots(1,1)
+#ratioFig, ratioAx = plt.subplots(1,1)
 varAx.grid()
-ratioAx.grid()
+#ratioAx.grid()
 def VAF2seaLevel(vol):
     return -vol / 3.62e14 * rhoi / rhosw * 1000.
 
 def seaLevel2VAF(vol):
     return -vol * 3.62e14 * rhosw / rhoi / 1000.
 
+def plotEnsembleBounds(boundsDir, controlFile=None):
+    boundsFiles = sorted(os.listdir(boundsDir)) # get filenames in directory
+    
+    for boundsFile in boundsFiles:
+        if 'globalStats' not in boundsFile:
+            boundsFiles.remove(boundsFile)
+            
+    f1 = Dataset(boundsDir + boundsFiles[0], 'r')
+    yr = f1.variables['daysSinceStart'][:] / 365.0
+    f2 = Dataset(boundsDir + boundsFiles[1], 'r')
+    if controlFile:
+        #interpolate control run onto ensemble member time vector
+        controlData = Dataset(controlFile, 'r')
+        controlInterp = np.interp(yr, controlData.variables['daysSinceStart'][:]/365.0, 
+                       controlData.variables[options.variableName][:])
+    
+    var2plot1 = f1.variables[options.variableName][:] \
+                 - f1.variables[options.variableName][0] \
+                 - controlInterp + controlInterp[0]
+                
+    var2plot2 = np.interp(yr, f2.variables['daysSinceStart'][:]/365.0,
+                          f2.variables[options.variableName][:] 
+                          - f2.variables[options.variableName][0]) \
+                          - controlInterp + controlInterp[0]
+                
+    varAx.fill_between(yr+2000., var2plot1, var2plot2, facecolor='tab:grey', alpha = 0.3)
+    
 
 def plotEnsemble(ensDir, controlFile=None):
 #    print("Reading and plotting file: {}".format(fname))
@@ -97,8 +130,8 @@ def plotEnsemble(ensDir, controlFile=None):
             if 'red' in colorlist[colorIndex][0]: #skip red for colorblind safety
                 colorIndex += 1
                 
-            varAx.plot(yr, var2plot, color='tab:purple',#colorlist[colorIndex][0], 
-                    linestyle=linestyleList[linestyleIndex], label=ensembleMember)
+            varAx.plot(yr+2000., var2plot, color=colorlist[colorIndex][0], 
+                    linestyle=linestyleList[linestyleIndex],label=ensembleMember)
             
             print('Run {}\ncolor {}\nlinestyle {}'.format(ensembleMember, 
                   colorlist[colorIndex][0], linestyleList[linestyleIndex]))
@@ -112,28 +145,33 @@ def addSeaLevAx(axName):
     seaLevAx.set_ylabel('$\Delta$ GMSL (mm)')
 
 controlIndex=0
+boundsIndex=0
 controlFile=None
+
+
 
 for directory in ensembleDirs:
     print("Ensemble {}".format(directory))
     if controlFiles:
         controlFile=controlFiles[controlIndex]
-        
+    if boundsDirs and boundsIndex <= len(boundsDirs)-1:
+        plotEnsembleBounds(boundsDirs[boundsIndex], controlFile)
     units = plotEnsemble(directory, controlFile)
     controlIndex += 1
     linestyleIndex += 1
+    boundsIndex += 1
     
 if options.variableName == "volumeAboveFloatation":
     addSeaLevAx(varAx)
 
 varAx.set_xlabel('Year')
-varAx.set_ylabel('$\Delta$ {}\n({})'.format(options.variableName, units))
+varAx.set_ylabel('$\Delta$ volume above \nfloatation (m$^3$)'.format(options.variableName, units))
 
 #varAx.legend()
 varFig.tight_layout()
 #varAx.set_ylim(bottom=-7e12, top=0)
-varAx.set_xlim(left=0, right=100.)
-ratioAx.set_xlim(left=0, right=100.)
+varAx.set_xlim(left=2000, right=2100.)
+#ratioAx.set_xlim(left=0, right=100.)
 #set a reasonable fontsize
 plt.rcParams.update({'font.size': 16})
 
@@ -195,3 +233,4 @@ plt.rcParams.update({'font.size': 16})
 ##set a reasonable fontsize
 #plt.rcParams.update({'font.size': 16})
 plt.show()
+#varFig.savefig('/Users/trevorhillebrand/Documents/mpas/MALI_output/Humboldt_melt_calv_ensemble/Humboldt_only_runs/projections/SL_contributions.png', dpi=300)
