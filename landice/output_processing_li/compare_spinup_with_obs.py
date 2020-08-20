@@ -113,15 +113,15 @@ dHdtRes_InfNorm = np.linalg.norm(dHdtRes, ord=np.inf, axis=1)
 
 # calculate stats
 thicknessRes_mean = np.mean(thicknessRes, axis=1)
-thicknessRes_MAE = np.mean(np.abs(thicknessRes, axis=1)) # Mean absolute error
+thicknessRes_MAE = np.mean(np.abs(thicknessRes), axis=1) # Mean absolute error
 thicknessRes_stdev = np.std(thicknessRes, axis=1)
 thicknessRMSE = np.sqrt(np.mean(thicknessRes**2, axis=1))
 surfaceSpeedRes_mean = np.mean(surfaceSpeedRes, axis=1)
-surfaceSpeedRes_MAE = np.mean(np.abs(surfaceSpeedRes, axis=1))
+surfaceSpeedRes_MAE = np.mean(np.abs(surfaceSpeedRes), axis=1)
 surfaceSpeedRes_stdev = np.std(surfaceSpeedRes, axis=1)
 surfaceSpeedRMSE = np.sqrt(np.mean(surfaceSpeedRes**2, axis=1))
 dHdtRes_mean = np.mean(dHdtRes, axis=1)
-dHdtRes_MAE = np.mean(np.abs(dHdtRes), axis=1))
+dHdtRes_MAE = np.mean(np.abs(dHdtRes), axis=1)
 dHdtRes_stdev = np.std(dHdtRes, axis=1)
 dHdtRMSE = np.sqrt(np.mean(dHdtRes**2, axis=1))
 
@@ -135,7 +135,7 @@ thick_axs[0].plot(modTime, thicknessRMSE)
 thick_axs[0].set_ylabel('RMSE')
 thick_axs[1].plot(modTime, thicknessRes_InfNorm)
 thick_axs[1].set_ylabel('Inf norm')
-thick_axs[2].plot(modTime, thicknessRes,MAE)
+thick_axs[2].plot(modTime, thicknessRes_MAE)
 thick_axs[2].set_xlabel('Time (yrs)')
 thick_axs[2].set_ylabel('Mean abs. error')
 plt.subplots_adjust(hspace=0.5)
