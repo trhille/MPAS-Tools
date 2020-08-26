@@ -12,8 +12,8 @@ from netCDF4 import Dataset
 import numpy as np
 import matplotlib.pyplot as plt
 
-filename = ('/Users/trevorhillebrand/Documents/mpas/MALI_output/Humboldt_1to10km/calving_'
-            + 'melting_test/RCP_ensembles/rcp26/calving_melting_smb.nc')
+filename = '/Users/trevorhillebrand/Documents/mpas/MALI_output/Humboldt_1to10km/' + \
+            'calving_melting_test/calveTest_082420/VM400kPa/output_all_timesteps.nc'
 
 f = Dataset(filename, 'r')
 f.set_auto_mask(False)
@@ -25,7 +25,7 @@ yr = f.variables["daysSinceStart"][:] / 365.
 
 thkAnnual = f.variables["thickness"][:]
 sfcMassBal = f.variables["sfcMassBalApplied"][:]
-faceMeltRateApplied = f.variables["faceMeltRateApplied"][:] #m/s
+faceMeltRateApplied = sfcMassBal*0. #f.variables["faceMeltRateApplied"][:] #m/s
 calvingThickness = f.variables["calvingThickness"][:] # m
 xCell = f.variables["xCell"][:]
 areaCell = f.variables["areaCell"][:]
@@ -41,8 +41,14 @@ sfcMassBalVolFlux = np.sum(sfcMassBal * cellAreaArray, axis=1) / 910. * deltat
 
 massBudget = sfcMassBalVolFlux - faceMeltVolFlux - calvingVolFlux
 
-plt.plot(yr, np.cumsum(massBudget)); 
-plt.plot(yr, HumboldtVol - HumboldtVol[0]); plt.xlabel('yrs'); 
-plt.ylabel('volume change (m^3)'); plt.show()
+budgetSumPlot, = plt.plot(yr, np.cumsum(massBudget) - massBudget[0], c='tab:blue');
+sfcMassBalPlot, = plt.plot(yr, np.cumsum(sfcMassBalVolFlux), c='tab:pink')
+calvingPlot, = plt.plot(yr, -np.cumsum(calvingVolFlux), c='tab:green')
+totalVolChangePlot, = plt.plot(yr, HumboldtVol - HumboldtVol[0], c='tab:orange', linestyle='dotted'); 
+plt.xlabel('yrs')
+plt.ylabel('volume change (m^3)')
+plt.legend([budgetSumPlot, sfcMassBalPlot, calvingPlot, totalVolChangePlot],
+           ['total budget', 'sfcMassBal', 'calving', 'total volume change'])
+plt.grid()
 
 plt.show()
