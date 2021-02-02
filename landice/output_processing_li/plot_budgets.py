@@ -3,8 +3,8 @@
 """
 Created on Mon May 11 19:15:45 2020
 This creates a mass budget (melting, calving, SMB) from model output.nc file. 
-Output fields must include calvingThickness, faceMeltRateApplied, sfcMassBalApplied,
-and may include basalMassBal
+Output fields must include thickness, calvingThickness, faceMeltRateApplied, sfcMassBalApplied,
+groundedMarineMarginMask
 
 @author: trevorhillebrand
 """
@@ -12,8 +12,8 @@ from netCDF4 import Dataset
 import numpy as np
 import matplotlib.pyplot as plt
 
-filename = '/Users/trevorhillebrand/Documents/mpas/MALI_output/Humboldt_1to10km/' + \
-            'calving_melting_test/calveTest_082420/VM400kPa/output_all_timesteps.nc'
+filename = '/lustre/scratch4/turquoise/trhille/Humboldt_1to10km_r02_20210112/m20/floatKill_TFminus0.5/output_all_timesteps.nc' 
+         
 
 f = Dataset(filename, 'r')
 f.set_auto_mask(False)
@@ -23,32 +23,37 @@ s_per_day = 86400.
 deltat = np.gradient(f.variables["daysSinceStart"][:]) * s_per_day
 yr = f.variables["daysSinceStart"][:] / 365.
 
-thkAnnual = f.variables["thickness"][:]
+thk = f.variables["thickness"][:]
 sfcMassBal = f.variables["sfcMassBalApplied"][:]
-faceMeltRateApplied = sfcMassBal*0. #f.variables["faceMeltRateApplied"][:] #m/s
-calvingThickness = f.variables["calvingThickness"][:] # m
+faceMeltRateApplied = f.variables["faceMeltRateApplied"][:] #m/s
+calvingThickness = f.variables["calvingThickness"][:]
+groundedCalvingThickness = calvingThickness * f.variables["groundedMarineMarginMask"][:]# m
+floatingCalvingThickness = calvingThickness * (1 - f.variables["groundedMarineMarginMask"][:])
 xCell = f.variables["xCell"][:]
 areaCell = f.variables["areaCell"][:]
 
-#humboldtMask = (xCell < -285704)
-#humboldtMaskArray = np.tile(humboldtMask, (np.shape(calvingThickness)[0],1))
 cellAreaArray = np.tile(areaCell, (np.shape(calvingThickness)[0],1))
 
-HumboldtVol = np.sum(thkAnnual * cellAreaArray, axis=1)
-calvingVolFlux = np.sum(calvingThickness * cellAreaArray,axis=1) #m^3
+totalVol = np.sum(thk * cellAreaArray, axis=1)
+calvingVolFlux = np.sum(calvingThickness * cellAreaArray,axis=1) #m^3i
+groundedCalvingVolFlux = np.sum(groundedCalvingThickness * cellAreaArray,axis=1) #m^3
+floatingCalvingVolFlux = np.sum(floatingCalvingThickness * cellAreaArray,axis=1) #m^3
 faceMeltVolFlux = np.sum(faceMeltRateApplied, axis=1) * deltat # m^3
 sfcMassBalVolFlux = np.sum(sfcMassBal * cellAreaArray, axis=1) / 910. * deltat
 
 massBudget = sfcMassBalVolFlux - faceMeltVolFlux - calvingVolFlux
 
 budgetSumPlot, = plt.plot(yr, np.cumsum(massBudget) - massBudget[0], c='tab:blue');
+faceMeltPlot, = plt.plot(yr, np.cumsum(-faceMeltVolFlux), c='tab:purple')
 sfcMassBalPlot, = plt.plot(yr, np.cumsum(sfcMassBalVolFlux), c='tab:pink')
-calvingPlot, = plt.plot(yr, -np.cumsum(calvingVolFlux), c='tab:green')
-totalVolChangePlot, = plt.plot(yr, HumboldtVol - HumboldtVol[0], c='tab:orange', linestyle='dotted'); 
+groundedCalvingPlot, = plt.plot(yr, np.cumsum(-groundedCalvingVolFlux), c='tab:green', linestyle='dashed')
+floatingCalvingPlot, = plt.plot(yr, np.cumsum(-floatingCalvingVolFlux), c='tab:green', linestyle='dotted')
+calvingPlot, = plt.plot(yr, np.cumsum(-calvingVolFlux), c='tab:green')
+totalVolChangePlot, = plt.plot(yr, totalVol - totalVol[0], c='tab:orange', linestyle='dotted'); 
 plt.xlabel('yrs')
 plt.ylabel('volume change (m^3)')
-plt.legend([budgetSumPlot, sfcMassBalPlot, calvingPlot, totalVolChangePlot],
-           ['total budget', 'sfcMassBal', 'calving', 'total volume change'])
+plt.legend([budgetSumPlot, faceMeltPlot, sfcMassBalPlot, groundedCalvingPlot, floatingCalvingPlot, calvingPlot, totalVolChangePlot],
+           ['total budget', 'faceMelt', 'sfcMassBal', 'grounded calving', 'floating calving', 'total calving', 'total volume change'])
 plt.grid()
 
 plt.show()
