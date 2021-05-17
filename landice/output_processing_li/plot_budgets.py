@@ -11,11 +11,14 @@ groundedMarineMarginMask
 from netCDF4 import Dataset
 import numpy as np
 import matplotlib.pyplot as plt
+from optparse import OptionParser
 
-filename = '/global/cscratch1/sd/trhille/Humboldt_1to10km_r02_20210304/m10/MIROC5/VM170kPa_MIROC5/output_all_timesteps.nc'
-         
+print("** Gathering information.  (Invoke with --help for more details. All arguments are optional)")
+parser = OptionParser(description=__doc__)
+parser.add_option("-f", dest="filename", help="filename for plotting", metavar="FILENAME")
+options, args = parser.parse_args()
 
-f = Dataset(filename, 'r')
+f = Dataset(options.filename, 'r')
 f.set_auto_mask(False)
 rhoi = 910.
 s_per_day = 86400.
