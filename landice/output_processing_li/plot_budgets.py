@@ -56,7 +56,7 @@ totalVolChangePlot, = plt.plot(yr, totalVol - totalVol[0], c='tab:orange', lines
 plt.xlabel('yrs')
 plt.ylabel('volume change (m^3)')
 plt.legend([budgetSumPlot, faceMeltPlot, sfcMassBalPlot,  calvingPlot, totalVolChangePlot],
-           ['total budget', 'faceMelt', 'sfcMassBal', 'total calving', 'total volume change'])
+           ['total budget', 'undercutting', 'SMB', 'calving', 'total volume change'])
 plt.grid()
 
 plt.show()
