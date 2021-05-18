@@ -18,45 +18,57 @@ parser = OptionParser(description=__doc__)
 parser.add_option("-f", dest="filename", help="filename for plotting", metavar="FILENAME")
 options, args = parser.parse_args()
 
-f = Dataset(options.filename, 'r')
-f.set_auto_mask(False)
+filenames = options.filename.split(',') #create list of filenames to loop over
+nFiles = len(filenames)
 rhoi = 910.
 s_per_day = 86400.
 
-deltat = np.gradient(f.variables["daysSinceStart"][:]) * s_per_day
-yr = f.variables["daysSinceStart"][:] / 365.
+if nFiles > 3:
+    nRows = 2
+    nCols = int(nFiles / 2 + nFiles % 2)
+else:
+    nRows = 1
+    nCols = nFiles
 
-thk = f.variables["thickness"][:]
-sfcMassBal = f.variables["sfcMassBalApplied"][:]
-faceMeltingThickness = f.variables["faceMeltingThickness"][:] #m
-calvingThickness = f.variables["calvingThickness"][:]
-#groundedCalvingThickness = calvingThickness * f.variables["groundedMarineMarginMask"][:]# m
-#floatingCalvingThickness = calvingThickness * (1 - f.variables["groundedMarineMarginMask"][:])
-xCell = f.variables["xCell"][:]
-areaCell = f.variables["areaCell"][:]
+fig, axs = plt.subplots(nrows=nRows, ncols=nCols, sharex=True, sharey=True)
 
-cellAreaArray = np.tile(areaCell, (np.shape(calvingThickness)[0],1))
+axs = axs.ravel() #easier to index with flattened axs array; remove last subplot if nFiles is odd
+if nFiles % 2 == 1:
+    fig.delaxes(axs[-1])
 
-totalVol = np.sum(thk * cellAreaArray, axis=1)
-calvingVolFlux = np.sum(calvingThickness * cellAreaArray,axis=1) #m^3
-#groundedCalvingVolFlux = np.sum(groundedCalvingThickness * cellAreaArray,axis=1) #m^3
-#floatingCalvingVolFlux = np.sum(floatingCalvingThickness * cellAreaArray,axis=1) #m^3
-faceMeltVolFlux = np.sum(faceMeltingThickness * cellAreaArray,axis=1) # m^3
-sfcMassBalVolFlux = np.sum(sfcMassBal * cellAreaArray, axis=1) / 910. * deltat
+for filename,ax in zip(filenames,axs):
+    f = Dataset(filename, 'r')
+    f.set_auto_mask(False)
 
-massBudget = sfcMassBalVolFlux - faceMeltVolFlux - calvingVolFlux
+    deltat = np.gradient(f.variables["daysSinceStart"][:]) * s_per_day
+    yr = f.variables["daysSinceStart"][:] / 365.
 
-budgetSumPlot, = plt.plot(yr, np.cumsum(massBudget) - massBudget[0], c='tab:blue');
-faceMeltPlot, = plt.plot(yr, np.cumsum(-faceMeltVolFlux), c='tab:purple')
-sfcMassBalPlot, = plt.plot(yr, np.cumsum(sfcMassBalVolFlux), c='tab:pink')
-#groundedCalvingPlot, = plt.plot(yr, np.cumsum(-groundedCalvingVolFlux), c='tab:green', linestyle='dashed')
-#floatingCalvingPlot, = plt.plot(yr, np.cumsum(-floatingCalvingVolFlux), c='tab:green', linestyle='dotted')
-calvingPlot, = plt.plot(yr, np.cumsum(-calvingVolFlux), c='tab:green')
-totalVolChangePlot, = plt.plot(yr, totalVol - totalVol[0], c='tab:orange', linestyle='dotted'); 
-plt.xlabel('yrs')
-plt.ylabel('volume change (m^3)')
-plt.legend([budgetSumPlot, faceMeltPlot, sfcMassBalPlot,  calvingPlot, totalVolChangePlot],
-           ['total budget', 'undercutting', 'SMB', 'calving', 'total volume change'])
-plt.grid()
+    thk = f.variables["thickness"][:]
+    sfcMassBal = f.variables["sfcMassBalApplied"][:]
+    faceMeltingThickness = f.variables["faceMeltingThickness"][:] #m
+    calvingThickness = f.variables["calvingThickness"][:]
+    xCell = f.variables["xCell"][:]
+    areaCell = f.variables["areaCell"][:]
+
+    cellAreaArray = np.tile(areaCell, (np.shape(calvingThickness)[0],1))
+
+    totalVol = np.sum(thk * cellAreaArray, axis=1)
+    calvingVolFlux = np.sum(calvingThickness * cellAreaArray,axis=1) #m^3
+    faceMeltVolFlux = np.sum(faceMeltingThickness * cellAreaArray,axis=1) # m^3
+    sfcMassBalVolFlux = np.sum(sfcMassBal * cellAreaArray, axis=1) / 910. * deltat
+
+    massBudget = sfcMassBalVolFlux - faceMeltVolFlux - calvingVolFlux
+
+    budgetSumPlot, = ax.plot(yr, np.cumsum(massBudget) - massBudget[0], c='tab:blue');
+    faceMeltPlot, = ax.plot(yr, np.cumsum(-faceMeltVolFlux), c='tab:purple')
+    sfcMassBalPlot, = ax.plot(yr, np.cumsum(sfcMassBalVolFlux), c='tab:pink')
+    calvingPlot, = ax.plot(yr, np.cumsum(-calvingVolFlux), c='tab:green')
+    totalVolChangePlot, = ax.plot(yr, totalVol - totalVol[0], c='tab:orange', linestyle='dotted'); 
+    ax.set_xlabel('yrs')
+    ax.set_ylabel('volume change (m^3)')
+    ax.grid()
+
+axs[0].legend([budgetSumPlot, faceMeltPlot, sfcMassBalPlot,  calvingPlot, totalVolChangePlot],
+               ['total budget', 'undercutting', 'SMB', 'calving', 'total volume change'])
 
 plt.show()
