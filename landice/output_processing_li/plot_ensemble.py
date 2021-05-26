@@ -54,16 +54,25 @@ print("Using seawater density of {} kg/m3".format(rhosw))
 colormap = mpl.colors.TABLEAU_COLORS
 #colormap = mpl.colors.XKCD_COLORS
 colorlist = list(colormap.items())
-
+#Get units
+f = Dataset(controlFiles[0], 'r')
+units=f.variables[options.variableName].units
+f.close()
 #set linestyles to loop through (e.g., to separate out RCP scenarios)
 linestyleList = ['solid', 'dashed', 'dotted', 'dashdot']
 linestyleIndex = 0 # initialize for loop
 
 # create axes to plot into
-varFig, varAx = plt.subplots(1,1)
+varFig, varAx = plt.subplots(1,2, sharey=True, sharex=True)
 #ratioFig, ratioAx = plt.subplots(1,1)
-varAx.grid()
+varAx[0].grid()
+varAx[1].grid()
 #ratioAx.grid()
+plotLines = [] #empty list to fill with lines
+plotLineNames = [] #empty list to fill with filenames
+plotBounds = []
+plotBoundNames = []
+
 def VAF2seaLevel(vol):
     return -vol / 3.62e14 * rhoi / rhosw * 1000.
 
@@ -76,6 +85,7 @@ def plotEnsembleBounds(boundsDir, controlFile=None):
     for boundsFile in boundsFiles:
         if 'globalStats' not in boundsFile:
             boundsFiles.remove(boundsFile)
+            
             
     f1 = Dataset(boundsDir + boundsFiles[0], 'r')
     yr = f1.variables['daysSinceStart'][:] / 365.0
@@ -94,9 +104,16 @@ def plotEnsembleBounds(boundsDir, controlFile=None):
                           f2.variables[options.variableName][:] 
                           - f2.variables[options.variableName][0]) \
                           - controlInterp + controlInterp[0]
-                
-    varAx.fill_between(yr+2000., var2plot1, var2plot2, facecolor='tab:grey', alpha = 0.3)
+    if 'HadGEM2' in boundsFiles[0]:
+        plotAx = varAx[1]
+    elif 'MIROC5' in boundsFiles[0]:
+        plotAx = varAx[0]
+        
+    tmpFill = plotAx.fill_between(yr+2007., var2plot1, var2plot2, facecolor='tab:grey', alpha = 0.6)
+    plotBounds.append(tmpFill)
+    plotBoundNames.append(boundsFiles[0])
     
+    return plotBounds, plotBoundNames
 
 def plotEnsemble(ensDir, controlFile=None):
 #    print("Reading and plotting file: {}".format(fname))
@@ -125,24 +142,26 @@ def plotEnsemble(ensDir, controlFile=None):
                                controlData.variables[options.variableName][:])
                 
                 var2plot = var2plot - controlInterp + controlInterp[0]
-            
-            
-            if 'red' in colorlist[colorIndex][0]: #skip red for colorblind safety
-                colorIndex += 1
+
+            if 'HadGEM2' in ensembleMember:
+                plotAx = varAx[1]
+            elif 'MIROC5' in ensembleMember:
+                plotAx = varAx[0]
                 
-            varAx.plot(yr+2000., var2plot, color=colorlist[colorIndex][0], 
-                    linestyle=linestyleList[linestyleIndex],label=ensembleMember)
+            tmpLine, = plotAx.plot(yr+2007., var2plot, 
+                                   label=ensembleMember)
+            plotLines.append(tmpLine)
+            plotLineNames.append(ensembleMember)
             
-            print('Run {}\ncolor {}\nlinestyle {}'.format(ensembleMember, 
-                  colorlist[colorIndex][0], linestyleList[linestyleIndex]))
+
             colorIndex += 1 # go to next color
             f.close()
-    return units
+    return plotLines, plotLineNames
     
 
 def addSeaLevAx(axName):
     seaLevAx = axName.secondary_yaxis('right', functions=(VAF2seaLevel, seaLevel2VAF))
-    seaLevAx.set_ylabel('$\Delta$ GMSL (mm)')
+    seaLevAx.set_ylabel('Sea-level\nequivalent (mm)', fontsize=16)
 
 controlIndex=0
 boundsIndex=0
@@ -156,21 +175,23 @@ for directory in ensembleDirs:
         controlFile=controlFiles[controlIndex]
     if boundsDirs and boundsIndex <= len(boundsDirs)-1:
         plotEnsembleBounds(boundsDirs[boundsIndex], controlFile)
-    units = plotEnsemble(directory, controlFile)
+    plotLines, plotLineNames = plotEnsemble(directory, controlFile)
     controlIndex += 1
     linestyleIndex += 1
     boundsIndex += 1
     
 if options.variableName == "volumeAboveFloatation":
-    addSeaLevAx(varAx)
+    addSeaLevAx(varAx[-1])
 
-varAx.set_xlabel('Year')
-varAx.set_ylabel('$\Delta$ volume above \nfloatation (m$^3$)'.format(options.variableName, units))
+varAx[0].set_xlabel('Year', fontsize=16)
+varAx[1].set_xlabel('Year', fontsize=16)
+varAx[0].set_ylabel('$\Delta$ {} (${}$)'.format(options.variableName, units), fontsize=16)
 
 #varAx.legend()
 varFig.tight_layout()
 #varAx.set_ylim(bottom=-7e12, top=0)
-varAx.set_xlim(left=2000, right=2100.)
+varAx[0].set_xlim(left=2000, right=2100.)
+varAx[1].set_xlim(left=2000, right=2100.)
 #ratioAx.set_xlim(left=0, right=100.)
 #set a reasonable fontsize
 plt.rcParams.update({'font.size': 16})
@@ -232,5 +253,41 @@ plt.rcParams.update({'font.size': 16})
 #ratioFig.tight_layout()
 ##set a reasonable fontsize
 #plt.rcParams.update({'font.size': 16})
+# Special plotting for humboldt ensemble:
+for line, lineName in zip(plotLines, plotLineNames):
+    if 'smb_only' in lineName:
+        line.set_color('tab:pink')
+    elif 'draftCalving' in lineName:
+        line.set_color('tab:green')
+    elif 'VM160' in lineName:
+        line.set_color('tab:purple')
+    elif 'VM170' in lineName:
+        line.set_color('tab:blue')
+    elif 'VM180' in lineName:
+        line.set_color('tab:cyan')
+    if 'm1_' in lineName:
+        line.set_linestyle('none')
+    if 'm3_' in lineName:
+        line.set_linestyle('none')
+    if 'm10_' in lineName:
+        line.set_linestyle('solid')
+    elif 'm25_' in lineName:
+        line.set_linestyle('dashed')
+        
+for bound, boundName in zip(plotBounds, plotBoundNames):
+    if 'm3_' in boundName:
+        bound.set_color('tab:grey')
+        bound.set_edgecolor('none')
+        bound.set_alpha(0.4)
+        bound.set_zorder(0)
+    elif 'm1_' in boundName:
+        bound.set_edgecolor('tab:grey')
+        bound.set_facecolor('none')
+        bound.set_hatch('xxxxxx')
+        bound.set_alpha(0.6)
+        
+varFig.set_size_inches(15, 5)
+varFig.subplots_adjust(wspace=0.15)
+
 plt.show()
 #varFig.savefig('/Users/trevorhillebrand/Documents/mpas/MALI_output/Humboldt_melt_calv_ensemble/Humboldt_only_runs/projections/SL_contributions.png', dpi=300)
