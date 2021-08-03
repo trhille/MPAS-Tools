@@ -63,10 +63,11 @@ linestyleList = ['solid', 'dashed', 'dotted', 'dashdot']
 linestyleIndex = 0 # initialize for loop
 
 # create axes to plot into
-varFig, varAx = plt.subplots(1,2, sharey=True, sharex=True)
+varFig, varAx = plt.subplots(1,3, sharey=True, sharex=True)
 #ratioFig, ratioAx = plt.subplots(1,1)
 varAx[0].grid()
 varAx[1].grid()
+varAx[2].grid()
 #ratioAx.grid()
 plotLines = [] #empty list to fill with lines
 plotLineNames = [] #empty list to fill with filenames
@@ -143,7 +144,9 @@ def plotEnsemble(ensDir, controlFile=None):
                 
                 var2plot = var2plot - controlInterp + controlInterp[0]
 
-            if 'HadGEM2' in ensembleMember:
+            if 'CNRM' in ensembleMember:
+                plotAx = varAx[2]
+            elif 'HadGEM2' in ensembleMember:
                 plotAx = varAx[1]
             elif 'MIROC5' in ensembleMember:
                 plotAx = varAx[0]
