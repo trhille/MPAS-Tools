@@ -187,14 +187,23 @@ if options.variableName == "volumeAboveFloatation":
     addSeaLevAx(varAx[-1])
 
 varAx[0].set_xlabel('Year', fontsize=16)
+varAx[0].set_title('MIROC5')
 varAx[1].set_xlabel('Year', fontsize=16)
-varAx[0].set_ylabel('$\Delta$ {} (${}$)'.format(options.variableName, units), fontsize=16)
+varAx[1].set_title('HadGEM2')
+varAx[2].set_xlabel('Year', fontsize=16)
+varAx[2].set_title('CNRM')
+
+if options.variableName == 'volumeAboveFloatation':
+    varAx[0].set_ylabel('$\Delta$ volume above\nfloatation (10$^{12}$ m$^3$)', fontsize=16)
+else:
+    varAx[0].set_ylabel('$\Delta$ {} (${}$)'.format(options.variableName, units), fontsize=16)
 
 #varAx.legend()
 varFig.tight_layout()
 #varAx.set_ylim(bottom=-7e12, top=0)
-varAx[0].set_xlim(left=2000, right=2100.)
-varAx[1].set_xlim(left=2000, right=2100.)
+varAx[0].set_xlim(left=2007, right=2100.)
+varAx[1].set_xlim(left=2007, right=2100.)
+varAx[2].set_xlim(left=2007, right=2100.)
 #ratioAx.set_xlim(left=0, right=100.)
 #set a reasonable fontsize
 plt.rcParams.update({'font.size': 16})
@@ -257,26 +266,44 @@ plt.rcParams.update({'font.size': 16})
 ##set a reasonable fontsize
 #plt.rcParams.update({'font.size': 16})
 # Special plotting for humboldt ensemble:
+
 for line, lineName in zip(plotLines, plotLineNames):
+    if 'm5_' in lineName:
+        lowCalving = 'VM180'
+        medCalving = 'VM170'
+        highCalving = 'VM160'
+    elif 'm7_' in lineName:
+        if 'HadGEM2' in lineName or 'CNRM' in lineName:
+            lowCalving = 'VM190'
+            medCalving = 'VM180'
+            highCalving = 'VM170'
+        elif 'MIROC5' in lineName:
+            lowCalving = 'VM180'
+            medCalving = 'VM170'
+            highCalving = 'VM160'
+    elif 'm1_' in lineName:
+        lowCalving = 'VM180'
+        medCalving = 'VM170'
+        highCalving = 'VM150'
     if 'smb_only' in lineName:
         line.set_color('tab:pink')
     elif 'draftCalving' in lineName:
         line.set_color('tab:green')
-    elif 'VM160' in lineName:
+    elif highCalving in lineName:
         line.set_color('tab:purple')
-    elif 'VM170' in lineName:
+    elif medCalving in lineName:
         line.set_color('tab:blue')
-    elif 'VM180' in lineName:
+    elif lowCalving in lineName:
         line.set_color('tab:cyan')
     if 'm1_' in lineName:
-        line.set_linestyle('none')
+        line.set_color('grey')
     if 'm3_' in lineName:
         line.set_linestyle('none')
-    if 'm10_' in lineName:
+    if 'm5_' in lineName:
         line.set_linestyle('solid')
-    elif 'm25_' in lineName:
+    elif 'm7_' in lineName:
         line.set_linestyle('dashed')
-        
+
 for bound, boundName in zip(plotBounds, plotBoundNames):
     if 'm3_' in boundName:
         bound.set_color('tab:grey')
@@ -285,8 +312,8 @@ for bound, boundName in zip(plotBounds, plotBoundNames):
         bound.set_zorder(0)
     elif 'm1_' in boundName:
         bound.set_edgecolor('tab:grey')
-        bound.set_facecolor('none')
-        bound.set_hatch('xxxxxx')
+        bound.set_facecolor('tab:grey')
+        #bound.set_hatch('xxxxxx')
         bound.set_alpha(0.6)
         
 varFig.set_size_inches(15, 5)
