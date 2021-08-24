@@ -32,12 +32,14 @@ else:
 
 fig, axs = plt.subplots(nrows=nRows, ncols=nCols, sharex=True, sharey=True)
 
-axs = axs.ravel() #easier to index with flattened axs array; remove last subplot if nFiles is odd
-if nFiles % 2 == 1:
-    fig.delaxes(axs[-1])
+if nRows > 1 or nCols > 1:
+    axs = axs.ravel() #easier to index with flattened axs array; remove last subplot if nFiles is odd
 
-for filename,ax in zip(filenames,axs):
-    f = Dataset(filename, 'r')
+    if nFiles % 2 == 1:
+        fig.delaxes(axs[-1])
+
+for ii, ax in enumerate(fig.axes):
+    f = Dataset(filenames[ii], 'r')
     f.set_auto_mask(False)
 
     deltat = np.gradient(f.variables["daysSinceStart"][:]) * s_per_day
@@ -68,7 +70,7 @@ for filename,ax in zip(filenames,axs):
     ax.set_ylabel('volume change (m^3)')
     ax.grid()
 
-axs[0].legend([budgetSumPlot, faceMeltPlot, sfcMassBalPlot,  calvingPlot, totalVolChangePlot],
+ax.legend([budgetSumPlot, faceMeltPlot, sfcMassBalPlot,  calvingPlot, totalVolChangePlot],
                ['total budget', 'undercutting', 'SMB', 'calving', 'total volume change'])
 
 plt.show()
