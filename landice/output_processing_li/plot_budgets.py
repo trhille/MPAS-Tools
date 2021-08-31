@@ -16,9 +16,11 @@ from optparse import OptionParser
 print("** Gathering information.  (Invoke with --help for more details. All arguments are optional)")
 parser = OptionParser(description=__doc__)
 parser.add_option("-f", dest="filename", help="filename for plotting", metavar="FILENAME")
+parser.add_option("-s", dest="startYear", help="Calendar year at time 0", default=2007, metavar="TIME")
 options, args = parser.parse_args()
 
 filenames = options.filename.split(',') #create list of filenames to loop over
+startYear = options.startYear
 nFiles = len(filenames)
 rhoi = 910.
 s_per_day = 86400.
@@ -40,7 +42,7 @@ for ii, filename in enumerate(filenames):
         g = Dataset(filename.replace('output_all_timesteps', 'globalStats'))
         deltat = np.gradient(f.variables["daysSinceStart"][:]) * s_per_day
         daysSinceStart = f.variables["daysSinceStart"][:]
-        yr = daysSinceStart / 365.
+        yr = daysSinceStart / 365. + startYear
 
         nCells = f.dimensions["nCells"].size
         cellsOnCell = f.variables["cellsOnCell"][:]
@@ -147,7 +149,7 @@ for ii, filename in enumerate(filenames):
 
             f = Dataset(filename + '_' + mask + '.nc', 'r')
             f.set_auto_mask(False)
-            yr = f.variables['daysSinceStart'][:] / 365.
+            yr = f.variables['daysSinceStart'][:] / 365. + startYear
             GLvolFlux = f.variables['GLvolFlux'][:]
             sfcMassBalVolFlux = f.variables['sfcMassBalVolFlux'][:]
             basalMassBalVolFlux = f.variables['basalMassBalVolFlux'][:]
@@ -174,9 +176,9 @@ for ii, filename in enumerate(filenames):
 for ax in axs[1,:]:
     ax.set_xlabel('Year')
 for ax in axs[:,0]:
-    ax.set_ylabel('volume change (m$^3$)')
+    ax.set_ylabel('Total volume change (m$^3$)')
 axs[0,0].legend([GLfluxPlot, faceMeltPlot, sfcMassBalPlot,  basalMassBalPlot, calvingPlot, totalVolChangePlot],
-               ['GL flux', 'undercutting', 'SMB', 'BMB', 'calving', 'total volume change'])
+               ['GL flux', 'undercutting', 'SMB', 'BMB', 'calving', 'total'])
 
 #remove undercutting from floating plots, BMB from grounded plots
 
