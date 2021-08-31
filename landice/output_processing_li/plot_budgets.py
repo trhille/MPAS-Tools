@@ -3,9 +3,11 @@
 """
 Created on Mon May 11 19:15:45 2020
 This creates a mass budget (melting, calving, SMB) from model output.nc file. 
-Output fields must include thickness, calvingThickness, faceMeltRateApplied, sfcMassBalApplied,
-groundedMarineMarginMask
-
+Output fields must include thickness, calvingThickness, faceMeltingThickness, sfcMassBalApplied,
+basalMassBal, and cellMask. Also requires a globalStats.nc file, preferably with same time entries as
+output_all_timesteps.nc. The script saves the calculated budgets as massBudgets_groundedMask.nc and
+massBudgets_floatingMask.nc, which can then be used instead of output_all_timesteps.nc using
+$python plot_budgets.py -f <path1>/massBudgets,<path2>/massBudgets, etc.
 @author: trevorhillebrand
 """
 from netCDF4 import Dataset
@@ -158,8 +160,10 @@ for ii, filename in enumerate(filenames):
             totalVol = f.variables['totalVol'][:]
             f.close()
         #Now plot the budgets!
+        # debug: Uncomment next two lines to check if the usually slight 
+        # double-counting due to calving, GL flux, and faceMelt is problematic
+        #massBudget = sfcMassBalVolFlux + basalMassBalVolFlux - faceMeltVolFlux - calvingVolFlux + GLvolFlux
         #budgetSumPlot, = ax.plot(yr, np.cumsum(massBudget) - massBudget[0], c='tab:blue');
-        massBudget = sfcMassBalVolFlux + basalMassBalVolFlux - faceMeltVolFlux - calvingVolFlux + GLvolFlux
         if mask is groundedMask:
             GLfluxPlot, = ax.plot(yr, np.cumsum(GLvolFlux), c='tab:orange', linestyle=lineStyle)
             faceMeltPlot, = ax.plot(yr, np.cumsum(-faceMeltVolFlux), c='tab:purple', linestyle=lineStyle)
