@@ -366,7 +366,7 @@ def interpolate_field_with_layers(MPASfieldName):
 def vertical_interp_MPAS_grid(mpas_grid_input_layers, input_layers):
     destinationField = np.zeros((nCells, nVertLevels))
     for i in range(nCells):
-        destinationField[i,:] = np.interp(mpasLayerCenters, input_layers, mpas_grid_input_layers[:,i])
+        destinationField[i,:] = np.interp(mpasLayerCenters,input_layers, mpas_grid_input_layers[:,i])
     return destinationField
 
 
@@ -476,11 +476,6 @@ if filetype=='cism':
 
 
 elif filetype == 'mpas':
-    # Get the MPAS vertical dimensions if they exist
-    try:
-      nVertLevels = len(inputFile.dimensions['nVertLevels'])
-    except:
-      print('  Input file is missing the dimension nVertLevels.  Might not be a problem.')
 
     #try:
     #  nVertInterfaces = len(inputFile.dimensions['nVertInterfaces'])
@@ -593,7 +588,7 @@ if filetype=='cism':
    fieldInfo['thickness'] =     {'InputName':'thk',  'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
    if not options.thicknessOnly:
      fieldInfo['bedTopography'] = {'InputName':'topg', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-     fieldInfo['sfcMassBal'] =    {'InputName':'acab', 'scalefactor':910.0/(3600.0*24.0*365.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Assuming default CISM density
+     fieldInfo['sfcMassBal'] =    {'InputName':'acab', 'scalefactor':910.0/(3600.0*24.0*365.0)/1000.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Assuming default CISM density and mm/yr w.e. units for acab
      fieldInfo['floatingBasalMassBal'] =    {'InputName':'subm', 'scalefactor':910.0/(3600.0*24.0*365.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Assuming default CISM density
      #fieldInfo['temperature'] =   {'InputName':'temp', 'scalefactor':1.0, 'offset':273.15, 'gridType':'x1', 'vertDim':True}
      fieldInfo['temperature'] =   {'InputName':'tempstag', 'scalefactor':1.0, 'offset':273.15, 'gridType':'x1', 'vertDim':True}  # pick one or the other

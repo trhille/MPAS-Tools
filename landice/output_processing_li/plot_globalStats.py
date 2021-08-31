@@ -11,9 +11,9 @@ import numpy.ma as ma
 from netCDF4 import Dataset
 from optparse import OptionParser
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 rhoi = 910.0
-
 
 print("** Gathering information.  (Invoke with --help for more details. All arguments are optional)")
 parser = OptionParser(description=__doc__)
@@ -53,7 +53,7 @@ axX = axVol
 
 axVAF = fig.add_subplot(nrow, ncol, 2, sharex=axX)
 plt.xlabel('Year')
-plt.ylabel('VAF ({})'.format(massUnit))
+plt.ylabel('$\Delta$ VAF ({})'.format(massUnit))
 #plt.xticks(np.arange(22)*xtickSpacing)
 plt.grid()
 
@@ -93,7 +93,11 @@ plt.ylabel('calving flux (kg/yr)')
 #plt.xticks(np.arange(22)*xtickSpacing)
 plt.grid()
 
+def VAF2seaLevel(vol):
+    return vol / 3.62e14 * rhoi / 1028.
 
+def seaLevel2VAF(vol):
+    return vol * 3.62e14 * 1028. / rhoi
 
 def plotStat(fname):
     print("Reading and plotting file: {}".format(fname))
@@ -119,8 +123,11 @@ def plotStat(fname):
        VAF = VAF * rhoi
     elif options.units == "Gt":
        VAF = VAF * rhoi / 1.0e12
-    axVAF.plot(yr, VAF, label=name)
-
+       
+    axVAF.plot(yr, VAF - VAF[0], label=name)
+    seaLevAx = axVAF.secondary_yaxis('right', functions=(VAF2seaLevel, seaLevel2VAF))
+    seaLevAx.set_ylabel('GMSL equiv (m)')
+    
     volGround = f.variables['groundedIceVolume'][:]
     if options.units == "m3":
        pass
@@ -167,9 +174,10 @@ if(options.file3inName):
 if(options.file4inName):
    plotStat(options.file4inName)
 
-axCalvFlux.legend(loc='best', prop={'size': 6})
+#axCalvFlux.legend(loc='best', prop={'size': 6})
 
 print("Generating plot.")
 fig.tight_layout()
+
 plt.show()
 
