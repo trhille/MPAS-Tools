@@ -32,11 +32,21 @@ parser.add_option("-d", dest="ensembleDirs", help="directory containing ensemble
 parser.add_option("-b", dest="boundsDirs", help="directory containing ensemble members (strings separated by commas; no spaces)", metavar="FILENAME")
 parser.add_option("-v", dest="variableName", help="variable(s) to plot, separated by commas", default = "volumeAboveFloatation", metavar="FILENAME")
 parser.add_option("-c", dest="controlFiles", help="comma-separated paths to control run(s) to subtract from ensemble members", metavar="FILENAME")
+parser.add_option("--plotChange", dest="plotChange", help="Use this flag to plot the change since start", default=False)
 
 parser.add_option("-u", dest="units", help="units for mass/volume: m3, kg, Gt", default="m3", metavar="FILENAME")
 options, args = parser.parse_args()
 
+if options.plotChange == 'True':
+    plotChange = True
+elif options.plotChange == 'False':
+    plotChange = False
+else:
+    print('Invalid value for plotChange. Should either be True or False. Setting to False.')
+    
 ensembleDirs = options.ensembleDirs.split(',') # split ensemble directories into list
+variableName = options.variableName.split(',')
+
 if options.controlFiles:
     controlFiles = options.controlFiles.split(',') # split control files into list
 else:
@@ -50,35 +60,18 @@ else:
 print("Using ice density of {} kg/m3".format(rhoi))
 print("Using seawater density of {} kg/m3".format(rhosw))
 
-#set colormap for plots
-colormap = mpl.colors.TABLEAU_COLORS
-#colormap = mpl.colors.XKCD_COLORS
-colorlist = list(colormap.items())
-#Get units
-f = Dataset(controlFiles[0], 'r')
-units=f.variables[options.variableName].units
-f.close()
-#set linestyles to loop through (e.g., to separate out RCP scenarios)
-linestyleList = ['solid', 'dashed', 'dotted', 'dashdot']
-linestyleIndex = 0 # initialize for loop
-
 # create axes to plot into
-varFig, varAx = plt.subplots(1,3, sharey=True, sharex=True)
-#ratioFig, ratioAx = plt.subplots(1,1)
-varAx[0].grid()
-varAx[1].grid()
-varAx[2].grid()
-#ratioAx.grid()
+nCols = 3
+varFig, varAx = plt.subplots(len(variableName), nCols , sharey='row', sharex=True)
+varAx = varAx.ravel()
+
+for ax in varAx:
+    ax.grid()
+
 plotLines = [] #empty list to fill with lines
 plotLineNames = [] #empty list to fill with filenames
 plotBounds = []
 plotBoundNames = []
-
-def VAF2seaLevel(vol):
-    return -vol / 3.62e14 * rhoi / rhosw * 1000.
-
-def seaLevel2VAF(vol):
-    return -vol * 3.62e14 * rhosw / rhoi / 1000.
 
 def plotEnsembleBounds(boundsDir, controlFile=None):
     boundsFiles = sorted(os.listdir(boundsDir)) # get filenames in directory
@@ -95,20 +88,22 @@ def plotEnsembleBounds(boundsDir, controlFile=None):
         #interpolate control run onto ensemble member time vector
         controlData = Dataset(controlFile, 'r')
         controlInterp = np.interp(yr, controlData.variables['daysSinceStart'][:]/365.0, 
-                       controlData.variables[options.variableName][:])
+                       controlData.variables[variable][:])
     
-    var2plot1 = f1.variables[options.variableName][:] \
-                 - f1.variables[options.variableName][0] \
+    var2plot1 = f1.variables[variable][:] \
+                 - f1.variables[variable][0] \
                  - controlInterp + controlInterp[0]
                 
     var2plot2 = np.interp(yr, f2.variables['daysSinceStart'][:]/365.0,
-                          f2.variables[options.variableName][:] 
-                          - f2.variables[options.variableName][0]) \
+                          f2.variables[variable][:] 
+                          - f2.variables[variable][0]) \
                           - controlInterp + controlInterp[0]
-    if 'HadGEM2' in boundsFiles[0]:
-        plotAx = varAx[1]
+    if 'CNRM' in boundsFiles[0]:
+        plotAx = varAx[row*nCols + 2]
+    elif 'HadGEM2' in boundsFiles[0]:
+        plotAx = varAx[row*nCols + 1]
     elif 'MIROC5' in boundsFiles[0]:
-        plotAx = varAx[0]
+        plotAx = varAx[row*nCols]
         
     tmpFill = plotAx.fill_between(yr+2007., var2plot1, var2plot2, facecolor='tab:grey', alpha = 0.6)
     plotBounds.append(tmpFill)
@@ -117,8 +112,6 @@ def plotEnsembleBounds(boundsDir, controlFile=None):
     return plotBounds, plotBoundNames
 
 def plotEnsemble(ensDir, controlFile=None):
-#    print("Reading and plotting file: {}".format(fname))
-    colorIndex = 0 #initialize index to loop through color list
     ensembleFiles = sorted(os.listdir(ensDir)) # get filenames in directory
     for ensembleMember in ensembleFiles:
         if 'globalStats' in ensembleMember:
@@ -126,153 +119,104 @@ def plotEnsemble(ensDir, controlFile=None):
             f = Dataset(ensDir+ensembleMember,'r')
             yr = f.variables['daysSinceStart'][:]/365.0
             
-            # get units
-            try: 
-                units = f.variables[options.variableName].units
-            except:
-                units = 'm^3'
-        
-            var2plot = f.variables[options.variableName][:] \
-                         - f.variables[options.variableName][0]
+            initVol = f.variables["volumeAboveFloatation"][0]
+                
+            if plotChange is True:
+                var2plot = f.variables[variable][:] \
+                         - f.variables[variable][0]
+                initVol = 0.
+            else: 
+                var2plot = f.variables[variable][:]
                          
             # subtract off variables from control run
             if controlFile:
                 #interpolate control run onto ensemble member time vector
                 controlData = Dataset(controlFile, 'r')
                 controlInterp = np.interp(yr, controlData.variables['daysSinceStart'][:]/365.0, 
-                               controlData.variables[options.variableName][:])
-                
+                               controlData.variables[variable][:])
+
                 var2plot = var2plot - controlInterp + controlInterp[0]
 
             if 'CNRM' in ensembleMember:
-                plotAx = varAx[2]
+                plotAx = varAx[row*nCols + 2]
             elif 'HadGEM2' in ensembleMember:
-                plotAx = varAx[1]
+                plotAx = varAx[row*nCols + 1]
             elif 'MIROC5' in ensembleMember:
-                plotAx = varAx[0]
+                plotAx = varAx[row*nCols]
                 
             tmpLine, = plotAx.plot(yr+2007., var2plot, 
                                    label=ensembleMember)
             plotLines.append(tmpLine)
             plotLineNames.append(ensembleMember)
-            
 
-            colorIndex += 1 # go to next color
             f.close()
-    return plotLines, plotLineNames
-    
+    return plotLines, plotLineNames, initVol
+
+# The following functions for plotting sea-level equiv axis
+def VAF2seaLevel(vol):
+    return -(vol-initVol) / 3.62e14 * rhoi / rhosw * 1000.
+
+def seaLevel2VAF(vol):
+    return -(vol-initVol) * 3.62e14 * rhosw / rhoi / 1000.
 
 def addSeaLevAx(axName):
     seaLevAx = axName.secondary_yaxis('right', functions=(VAF2seaLevel, seaLevel2VAF))
-    seaLevAx.set_ylabel('Sea-level\nequivalent (mm)', fontsize=16)
+    seaLevAx.set_ylabel('Sea-level\ncontribution (mm)', fontsize=16)
 
-controlIndex=0
-boundsIndex=0
-controlFile=None
-
-
-
-for directory in ensembleDirs:
-    print("Ensemble {}".format(directory))
-    if controlFiles:
-        controlFile=controlFiles[controlIndex]
-    if boundsDirs and boundsIndex <= len(boundsDirs)-1:
-        plotEnsembleBounds(boundsDirs[boundsIndex], controlFile)
-    plotLines, plotLineNames = plotEnsemble(directory, controlFile)
-    controlIndex += 1
-    linestyleIndex += 1
-    boundsIndex += 1
+f = Dataset(controlFiles[0], 'r')
+for row, variable in enumerate(variableName):
+    controlIndex=0
+    boundsIndex=0
+    controlFile=None
+    for directory in ensembleDirs:
+        print("Ensemble {}".format(directory))
+        if controlFiles:
+            controlFile=controlFiles[controlIndex]
+        if boundsDirs and boundsIndex <= len(boundsDirs)-1:
+            plotEnsembleBounds(boundsDirs[boundsIndex], controlFile)
+        plotLines, plotLineNames, initVol = plotEnsemble(directory, controlFile)
+        controlIndex += 1
+        boundsIndex += 1
     
-if options.variableName == "volumeAboveFloatation":
-    addSeaLevAx(varAx[-1])
+    units=f.variables[variable].units
+    if variable == "volumeAboveFloatation":
+        addSeaLevAx(varAx[nCols - 1])
+    if variable == 'volumeAboveFloatation' and plotChange is True:
+        varAx[row * nCols].set_ylabel('$\Delta$ volume above\nfloatation (m$^3$)', fontsize=16)
+    elif variable == 'volumeAboveFloatation' and plotChange is  False:
+        varAx[row * nCols].set_ylabel('volume above\nfloatation (m$^3$)', fontsize=16)
+    elif variable != 'volumeAboveFloatation' and plotChange is True:
+        varAx[row * nCols].set_ylabel('$\Delta$ {} (${}$)'.format(variable, units), fontsize=16)
+    else:
+        varAx[row * nCols].set_ylabel('{} (${}$)'.format(variable, units), fontsize=16)
 
-varAx[0].set_xlabel('Year', fontsize=16)
+f.close()
+
+# Special plotting for humboldt ensemble:        
+for ax in varAx[-nCols::]:
+    ax.set_xlabel('Year', fontsize=16)
+
 varAx[0].set_title('MIROC5')
-varAx[1].set_xlabel('Year', fontsize=16)
 varAx[1].set_title('HadGEM2')
-varAx[2].set_xlabel('Year', fontsize=16)
 varAx[2].set_title('CNRM')
 
-if options.variableName == 'volumeAboveFloatation':
-    varAx[0].set_ylabel('$\Delta$ volume above\nfloatation (10$^{12}$ m$^3$)', fontsize=16)
-else:
-    varAx[0].set_ylabel('$\Delta$ {} (${}$)'.format(options.variableName, units), fontsize=16)
-
-#varAx.legend()
 varFig.tight_layout()
-#varAx.set_ylim(bottom=-7e12, top=0)
 varAx[0].set_xlim(left=2007, right=2100.)
-varAx[1].set_xlim(left=2007, right=2100.)
-varAx[2].set_xlim(left=2007, right=2100.)
-#ratioAx.set_xlim(left=0, right=100.)
-#set a reasonable fontsize
 plt.rcParams.update({'font.size': 16})
 
-# Now plot ratio of change high-res:low-res
-
-#def plotRatios():
-#    colorIndex=0
-#    ensembleFiles = sorted(os.listdir(ensembleDirs[0]))
-#    for ensembleMember in ensembleFiles:
-#        if 'globalStats.nc' in ensembleMember:
-#            
-#            f1 = Dataset(ensembleDirs[0]+ensembleMember,'r')
-#            f2 = Dataset(ensembleDirs[1]+ensembleMember,'r')
-#            f1Var = f1.variables[options.variableName][:]
-#            f2Var = f2.variables[options.variableName][:]
-#            yr = f1.variables['daysSinceStart'][:]/365.0
-#            
-#            # interpolate f2 onto f1 time
-#            f2Varinterp = np.interp(yr, f2.variables['daysSinceStart'][:]/365.0, 
-#                               f2Var[:])
-#            
-#           # get units
-#           # units = f1.variables[options.variableName].units
-#
-#           # subtract off variables from control run
-#           
-#            if controlFiles:
-#                #interpolate control run onto ensemble member time vector
-#                control1Data = Dataset(controlFiles[0], 'r')
-#                control1Interp = np.interp(yr, control1Data.variables['daysSinceStart'][:]/365.0, 
-#                               control1Data.variables[options.variableName][:])
-#                control2Data = Dataset(controlFiles[1], 'r')
-#                control2Interp = np.interp(yr, control2Data.variables['daysSinceStart'][:]/365.0, 
-#                               control2Data.variables[options.variableName][:])
-#                
-#                var2plot = (f2Varinterp - f2Varinterp[0] - (control2Interp - control2Interp[0])) / \
-#                            (f1Var - f1Var[0] - (control1Interp - control1Interp[0]))
-#            else:
-#               var2plot = (f2Varinterp - f2Varinterp[0]) / (f1Var - f1Var[0]) 
-#                        
-#                        
-#            if 'red' in colorlist[colorIndex][0]: #skip red for colorblind safety
-#                colorIndex += 1
-#                
-#            ratioAx.plot(yr, var2plot, color=colorlist[colorIndex][0], 
-#                    linestyle=linestyleList[0], label=ensembleMember)
-#            colorIndex += 1 # go to next color
-#            f1.close()
-#            f2.close()
-#            
-#    return f2Varinterp
-#  
-#
-#plotRatios()
-#
-#ratioAx.set_xlabel('Year')
-#ratioAx.set_ylabel('SLR ratio \n(high-res/low-res)')
-#ratioFig.tight_layout()
-##set a reasonable fontsize
-#plt.rcParams.update({'font.size': 16})
-# Special plotting for humboldt ensemble:
-
 for line, lineName in zip(plotLines, plotLineNames):
-    if 'm5_' in lineName:
+
+    if 'shelfMelt10myr' in lineName:
+        line.set_linewidth(1)
+    elif 'shelfMelt20myr' in lineName:
+        line.set_linewidth(2)
+    elif 'shelfMelt30myr' in lineName:
+        line.set_linewidth(3)
+    if 'm5_' in lineName or 'm10_' in lineName:
         lowCalving = 'VM180'
         medCalving = 'VM170'
         highCalving = 'VM160'
-    elif 'm7_' in lineName:
+    elif 'm7_' in lineName or 'm25_' in lineName:
         if 'HadGEM2' in lineName or 'CNRM' in lineName:
             lowCalving = 'VM190'
             medCalving = 'VM180'
@@ -287,8 +231,10 @@ for line, lineName in zip(plotLines, plotLineNames):
         highCalving = 'VM150'
     if 'smb_only' in lineName:
         line.set_color('tab:pink')
-    elif 'draftCalving' in lineName:
-        line.set_color('tab:green')
+    elif '2017calvingFront' in lineName:
+        line.set_color('tab:grey')
+    elif 'calvingVelocityData' in lineName:
+        line.set_color('tab:grey')
     elif highCalving in lineName:
         line.set_color('tab:purple')
     elif medCalving in lineName:
@@ -299,10 +245,13 @@ for line, lineName in zip(plotLines, plotLineNames):
         line.set_color('grey')
     if 'm3_' in lineName:
         line.set_linestyle('none')
-    if 'm5_' in lineName:
+    if 'm5_' in lineName or 'm10_' in lineName:
         line.set_linestyle('solid')
-    elif 'm7_' in lineName:
+    elif 'm7_' in lineName or 'm25_' in lineName:
         line.set_linestyle('dashed')
+    
+    if 'm10_' in lineName or 'm25_' in lineName:
+        line.set_color('tab:pink')
 
 for bound, boundName in zip(plotBounds, plotBoundNames):
     if 'm3_' in boundName:
@@ -316,8 +265,7 @@ for bound, boundName in zip(plotBounds, plotBoundNames):
         #bound.set_hatch('xxxxxx')
         bound.set_alpha(0.6)
         
-varFig.set_size_inches(15, 5)
-varFig.subplots_adjust(wspace=0.15)
+varFig.set_size_inches(nCols * 5, len(varAx) * 2)
+varFig.subplots_adjust(wspace=0.15, hspace=0.15)
 
 plt.show()
-#varFig.savefig('/Users/trevorhillebrand/Documents/mpas/MALI_output/Humboldt_melt_calv_ensemble/Humboldt_only_runs/projections/SL_contributions.png', dpi=300)
