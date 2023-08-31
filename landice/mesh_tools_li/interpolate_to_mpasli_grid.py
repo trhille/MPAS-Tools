@@ -649,7 +649,7 @@ fieldInfo = OrderedDict()
 if filetype=='cism':
 
    fieldInfo['thickness'] =     {'InputName':'thickness',  'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-   fieldInfo['iceMask'] =  {'InputName':'iceMask',  'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+   fieldInfo['iceMask'] =  {'InputName':'mask',  'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
    if not args.thicknessOnly:
      fieldInfo['bedTopography'] = {'InputName':'bed', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['sfcMassBal'] =    {'InputName':'smb', 'scalefactor':1.0/(3600.0*24.0*365.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Assuming mm/yr w.e. units for smb
@@ -667,8 +667,8 @@ if filetype=='cism':
      fieldInfo['observedSurfaceVelocityX'] = {'InputName':'vx_mean', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedSurfaceVelocityY'] = {'InputName':'vy_mean', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedSurfaceVelocityUncertainty'] = {'InputName':'vErr', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-     fieldInfo['observedThicknessTendency'] = {'InputName':'VMB_mean', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-     fieldInfo['observedThicknessTendencyUncertainty'] = {'InputName':'VMB_sdn', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['observedThicknessTendency'] = {'InputName':'VMB_mean', 'scalefactor':1.0/(365.0*24.0*3600.0*910.0*25.0e6), 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Simonsen dataset uses units of kg / cell/ yr
+     fieldInfo['observedThicknessTendencyUncertainty'] = {'InputName':'VMB_sdn', 'scalefactor':1.0/(365.0*24.0*3600.0*910.0*25.0e6), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['thicknessUncertainty'] = {'InputName':'errbed', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
 
      fieldInfo['ismip6shelfMelt_basin'] = {'InputName':'ismip6shelfMelt_basin', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
