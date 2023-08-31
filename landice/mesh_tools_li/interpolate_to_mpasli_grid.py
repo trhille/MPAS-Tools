@@ -648,10 +648,10 @@ fieldInfo = OrderedDict()
 # -----------------
 if filetype=='cism':
 
-   fieldInfo['thickness'] =     {'InputName':'thk',  'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+   fieldInfo['thickness'] =     {'InputName':'thickness',  'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
    fieldInfo['iceMask'] =  {'InputName':'iceMask',  'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
    if not args.thicknessOnly:
-     fieldInfo['bedTopography'] = {'InputName':'topg', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['bedTopography'] = {'InputName':'bed', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['sfcMassBal'] =    {'InputName':'smb', 'scalefactor':1.0/(3600.0*24.0*365.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Assuming mm/yr w.e. units for smb
      fieldInfo['sfcMassBalUncertainty'] =    {'InputName':'smb_std', 'scalefactor':1.0/(3600.0*24.0*365.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Assuming mm/yr w.e. units for smb
      fieldInfo['floatingBasalMassBal'] =    {'InputName':'subm', 'scalefactor':910.0/(3600.0*24.0*365.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # Assuming default CISM density
@@ -662,12 +662,14 @@ if filetype=='cism':
      fieldInfo['beta'] =          {'InputName':'beta', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x0', 'vertDim':False} # needs different mapping file...
      #fieldInfo['observedSpeed'] = {'InputName':'balvel', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x0', 'vertDim':False} # needs different mapping file...
      # fields for observed surface speed and associated error, observed thickness change
-     fieldInfo['observedSurfaceVelocityX'] = {'InputName':'vx', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-     fieldInfo['observedSurfaceVelocityY'] = {'InputName':'vy', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['basalMassBal'] =    {'InputName':'bmb', 'scalefactor':910.0/(3600.0*24.0*365.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['basalMassBalUncertainty'] =    {'InputName':'bmbErr', 'scalefactor':910.0/(3600.0*24.0*365.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['observedSurfaceVelocityX'] = {'InputName':'vx_mean', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['observedSurfaceVelocityY'] = {'InputName':'vy_mean', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedSurfaceVelocityUncertainty'] = {'InputName':'vErr', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-     fieldInfo['observedThicknessTendency'] = {'InputName':'dHdt', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-     fieldInfo['observedThicknessTendencyUncertainty'] = {'InputName':'dHdtErr', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-     fieldInfo['thicknessUncertainty'] = {'InputName':'topgerr', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['observedThicknessTendency'] = {'InputName':'VMB_mean', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['observedThicknessTendencyUncertainty'] = {'InputName':'VMB_sdn', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['thicknessUncertainty'] = {'InputName':'errbed', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
 
      fieldInfo['ismip6shelfMelt_basin'] = {'InputName':'ismip6shelfMelt_basin', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['ismip6shelfMelt_deltaT'] = {'InputName':'ismip6shelfMelt_deltaT', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
