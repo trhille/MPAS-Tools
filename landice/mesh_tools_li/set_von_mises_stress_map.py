@@ -38,25 +38,25 @@ grdVM = fout.createVariable('groundedVonMisesThresholdStress', 'd', ('Time', 'nC
 fltVM = fout.createVariable('floatingVonMisesThresholdStress', 'd', ('Time', 'nCells',))
 
 values=[
-        125.0,
-        200.0,
-        150.0,
-        300.0, #300
+        150.0,  # DML
+        200.0,  # Enderby
+        150.0,  # Amery
+        150.0,  # Phillipi, Denman
 
-        200.0, #225?
-        350.0, # 400?
-        400.0,
-        125.0, # 130-400
+        200.0,  # Totten
+        200.0,  # Mertz
+        200.0,  # Victoria Land
+        100.0,  # Ross
 
-        300.0, #400?
-        300.0, #300-400
-        300.0, # 300
-        200.0, # 100?
+        150.0,  # Getz
+        200.0,  # Thwaites/PIG
+        200.0,  # Bellingshausen
+        100.0,  # George VI
 
-        125.0,
-        125.0,#?
-        125.0,#120-400
-        125.0,#125-300
+        100.0,  # Larsen A-C
+        100.0,  # Larsen E
+        150.0,  # FRIS
+        100.0,  # Brunt-Stancomb
         ]
 
 grdVM[:]=100.0e3
