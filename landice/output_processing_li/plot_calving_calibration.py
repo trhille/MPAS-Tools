@@ -35,7 +35,7 @@ options, args = parser.parse_args()
 
 print("Using ice density of {} kg/m3 if required for unit conversions".format(rhoi))
 
-runs = sorted(glob.glob('*/regionalStats.nc'))
+runs = sorted(glob.glob('*/output/regionalStats.nc'))
 print(runs)
 nRuns = len(runs)
 
@@ -159,6 +159,42 @@ for reg in range(nRegions):
    else:
       axs4.flatten()[reg].sharex(axX)
 
+# Set up dictionary in which to record scores
+scores = {}
+scores["run_name"] = []
+for r in range(nRegions):
+    scores[rNames[r]] = []
+
+# Compute control values for scoring
+ctrl = Dataset(options.fileControl, 'r')
+tot_ctrl_area = ctrl.variables['regionalIceArea'][:]
+grd_ctrl_area = ctrl.variables['regionalGroundedIceArea'][:]
+tot_area_change_ctrl = tot_ctrl_area[-1] - tot_ctrl_area[1]
+grd_area_change_ctrl = grd_ctrl_area[-1] - grd_ctrl_area[1]
+ctrl.close()
+
+def score_run(fname):
+    print(f"Scoring file: {fname}")
+    scores["run_name"].append(fname)
+    f = Dataset(fname,'r')
+    ctrl = Dataset(options.fileControl, 'r')
+    # Account for sudden leap in area for many runs at first time.
+    tot_run_area = f.variables['regionalIceArea'][:]
+    grd_run_area = f.variables['regionalGroundedIceArea'][:] 
+    tot_area_change_run = tot_run_area[-1] - tot_run_area[1]
+    grd_area_change_run = grd_run_area[-1] - grd_run_area[1]
+    
+    perc_tot_area_diff = np.abs( (tot_area_change_run - tot_area_change_ctrl)
+                                 / tot_ctrl_area[1] ) 
+    perc_grd_area_diff = np.abs( (grd_area_change_run - grd_area_change_ctrl)
+                                 / grd_ctrl_area[1] )
+
+    score = perc_tot_area_diff + perc_grd_area_diff
+    for r in range(nRegions):
+        #print(f"{rNames[r]}: {score[r]:0.4f}")
+        scores[rNames[r]].append(score[r])
+
+    f.close()
 
 def plotStat(fname, col, addToLegend=False):
     print("Reading and plotting file: {}".format(fname))
@@ -227,8 +263,15 @@ def plotStat(fname, col, addToLegend=False):
 plotStat(options.fileControl, col='k', addToLegend=True)
 colors = pl.cm.jet(np.linspace(0,1,nRuns))
 for cnt, run in enumerate(runs):
-    plotStat(run, col=colors[cnt], addToLegend=True)
+    if run != options.fileControl:
+        plotStat(run, col=colors[cnt], addToLegend=True)
+        score_run(run)
 
+print(scores)
+
+for r in range(nRegions):
+    best_score_idx = np.argmin(scores[rNames[r]])
+    print(f"Region: {rNames[r]}; best run: {scores['run_name'][best_score_idx]}")
 
 axs1.flatten()[-1].legend(loc='best', prop={'size': 5})
 axs2.flatten()[-1].legend(loc='best', prop={'size': 5})
