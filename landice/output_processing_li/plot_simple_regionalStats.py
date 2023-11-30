@@ -107,7 +107,11 @@ ncol = 2
 nrow = 1
 
 # Set up Figure 1: volume stats overview
-fig1, axs1 = plt.subplots(nrow, ncol, figsize=(13, 11), num=1)
+fig1, axs1 = plt.subplots(nrow, ncol, figsize=(8, 6), num=1, sharex=True, sharey=True)
+for ax in axs1:
+    ax.grid()
+    ax.set_xlabel('Year')
+axs1[0].set_ylabel(f'Cumulative mass change ({options.units})')
 
 # Set up unit conversion factors to be used when reading variables
 if options.units == "m3":
@@ -154,10 +158,13 @@ def plotStat(fname, addToLegend=False):
         sys.exit(f"ERROR: Number of regions in file {fname} does not match number of regions in first input file!")
 
     # Fig 1: summary plot
-    plot_var = f.variables[options.plot_var][:] * volUnitFactor
+    if "Volume" in options.plot_var:
+        plot_var = f.variables[options.plot_var][:] * volUnitFactor
+    else:
+        plot_var = f.variables[options.plot_var][:]
     plot_var = plot_var[:,:] - plot_var[0,:]
     for r, color in zip(plot_regions, colors):
-        ax.plot(yr, plot_var[:,r], linestyle=linestyle, color=color)
+        ax.plot(yr, plot_var[:,r], linestyle=linestyle, color=color, linewidth=2)
 
     f.close()
 
