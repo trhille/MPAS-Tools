@@ -10,6 +10,8 @@ Matt Hoffman, 8/23/2022
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import sys
+import os
+import re
 import numpy as np
 from netCDF4 import Dataset
 from optparse import OptionParser
@@ -130,14 +132,28 @@ else:
 def plotStat(fname, addToLegend=False):
     if fname is None:
         return
+    # If the cleaned file doesn't exist, plot the unclean version.
+    # This is useful for hist files, which were added to the list
+    # of files dynamically, but usually aren't cleaned.
+    if 'cleaned' in fname and not os.path.isfile(fname):
+        tmpname = fname.removesuffix('.cleaned')
+        if os.path.isfile(tmpname):
+            print(f'{fname} does not exist, plotting {tmpname} instead.')
+            fname = tmpname
+        else:
+            print(f'{fname} and {tmpname} do not exist. Skipping.')
+            return
+
     print("Reading and plotting file: {}".format(fname))
 
     name = fname
 
     if 'AE02' in fname:
-       ax = axs1[0]
+        axs = [axs1[0]]  # for list comprehension plotting, below
     elif 'AE03' in fname:
-       ax = axs1[1]
+        axs = [axs1[1]]  # for list comprehension plotting, below
+    elif 'hist' in fname:
+        axs = axs1
 
     if 'gamma21000' in fname or 'm10/' in fname or 'no_thermal' in fname:
        linestyle = 'dashed'
@@ -151,6 +167,19 @@ def plotStat(fname, addToLegend=False):
     f = Dataset(fname,'r')
     yr = f.variables['daysSinceStart'][:]/365.0
     dt = f.variables['deltat'][:]/(3600.0*24.0*365.0) # in yr
+    plot_var = f.variables[options.plot_var][:]
+
+    if run_dict[fname] is not None:
+        hist = Dataset(run_dict[fname], 'r')
+        hist_yr = hist.variables['daysSinceStart'][:]/365.0
+        hist_dt = hist.variables['deltat'][:]/(3600.0*24.0*365.0) # in yr
+        hist_plot_var = hist.variables[options.plot_var][:]
+
+        # Concatenate hist data with exp data
+        yr = np.concatenate((hist_yr, yr))
+        dt = np.concatenate((hist_dt, dt))
+        plot_var = np.concatenate((hist_plot_var, plot_var))
+
     #yr = yr-yr[0]  # uncomment to align all start dates
     dtnR = np.tile(dt.reshape(len(dt),1), (1,nRegions))  # repeated per region with dim of nt,nRegions
     nRegionsLocal = len(f.dimensions['nRegions'])
@@ -159,17 +188,41 @@ def plotStat(fname, addToLegend=False):
 
     # Fig 1: summary plot
     if "Volume" in options.plot_var:
-        plot_var = f.variables[options.plot_var][:] * volUnitFactor
-    else:
-        plot_var = f.variables[options.plot_var][:]
+        plot_var *= volUnitFactor
+
     plot_var = plot_var[:,:] - plot_var[0,:]
     for r, color in zip(plot_regions, colors):
-        ax.plot(yr, plot_var[:,r], linestyle=linestyle, color=color, linewidth=2)
+        [ax.plot(yr, plot_var[:,r], linestyle=linestyle, color=color, linewidth=2) for ax in axs]
 
     f.close()
 
-for in_file in [options.file1inName, options.file2inName, options.file3inName, options.file4inName, options.file5inName, options.file6inName]:
-    plotStat(in_file)
+in_files = [options.file1inName, options.file2inName, options.file3inName,
+            options.file4inName, options.file5inName, options.file6inName]
+
+# Create a dictionary with entries run_file : hist_file
+run_dict = {}
+for file in in_files:
+    if file is None:
+        continue
+    if 'hist' in file:
+        hist_file = None
+    else:
+        hist_file = re.sub("expAE..", 'hist', file)
+        if 'cleaned' in hist_file and not os.path.isfile(hist_file):
+            tmpname = hist_file.removesuffix('.cleaned')
+            if os.path.isfile(tmpname):
+                print(f'{hist_file} does not exist, plotting {tmpname} instead.')
+                hist_file = tmpname
+            else:
+                print(f'{fname} and {tmpname} do not exist. Skipping.')
+                hist_file = None
+
+    run_dict[file] = hist_file
+
+print(run_dict)
+
+for file in in_files:
+    plotStat(file)
 
 print("Generating plot.")
 fig1.tight_layout()
