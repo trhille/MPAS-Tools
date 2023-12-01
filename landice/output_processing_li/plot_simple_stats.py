@@ -146,7 +146,7 @@ else:
             'expAE03': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
             'expAE04': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
             'expAE05': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-            'expAE06': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1., 'tier': '1'},
+            'expAE06': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '1'},
             'expAE07': {'color': 'tab:gray', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
             'expAE08': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
             'expAE09': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
@@ -173,7 +173,7 @@ else:
     nrow = 1
 
 # Set up Figure 1: volume stats overview
-fig1, axs1 = plt.subplots(nrow, ncol, figsize=(8, 6), num=1, sharex=True, sharey=True)
+fig1, axs1 = plt.subplots(nrow, ncol, figsize=(4*ncol, 6*nrow), num=1, sharex=True, sharey=True)
 for ax in axs1:
     ax.grid()
     ax.set_xlabel('Year')
