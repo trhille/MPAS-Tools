@@ -6,8 +6,6 @@ Currently only useful for whole-AIS simulations.
 Trevor Hillebrand 11/2023
 '''
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 import sys
 import os
 import re
@@ -246,13 +244,17 @@ def plotStat(fname, addToLegend=False):
 
     plot_var = plot_var[:] - plot_var[0]
     if options.regional:
-        colors = ['tab:green', 'tab:purple', 'tab:cyan']
         dtnR = np.tile(dt.reshape(len(dt),1), (1,nRegions))  # repeated per region with dim of nt,nRegions
         nRegionsLocal = len(f.dimensions['nRegions'])
         if nRegionsLocal != nRegions:
             sys.exit(f"ERROR: Number of regions in file {fname} does not match number of regions in first input file!")
         for r in plot_regions:
-            [ax.plot(yr, plot_var[:,r], linestyle=linestyle, color=region_colors[r], linewidth=2) for ax in axs]
+            lines, = [ax.plot(yr, plot_var[:,r], linestyle=linestyle,
+                          color=region_colors[r], linewidth=2,
+                          label=rNames[r]) for ax in axs]
+        if linestyle == 'solid':  # Only add solid curves to legend to avoid repetition
+            axs1[0].legend()
+
     else:
         [ax.plot(yr, plot_var, color=run_dict[fname]['color'],
                  linestyle=run_dict[fname]['linestyle'],
