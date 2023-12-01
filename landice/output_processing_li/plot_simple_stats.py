@@ -62,7 +62,10 @@ for file in in_files:
     if 'hist' in file:
         hist_file = None
     else:
-        hist_file = re.sub("expAE..", 'hist', file)
+        if "ctrl" in file:
+            hist_file = re.sub("ctrlAE", "hist", file)
+        else:
+            hist_file = re.sub("expAE..", 'hist', file)
         if 'cleaned' in hist_file and not os.path.isfile(hist_file):
             tmpname = hist_file.removesuffix('.cleaned')
             if os.path.isfile(tmpname):
@@ -73,6 +76,7 @@ for file in in_files:
                 hist_file = None
     run_dict[file] = {}
     run_dict[file]['hist_file'] = hist_file
+print(run_dict)
 # Antarctic data from:
 # Rignot, E., Bamber, J., van den Broeke, M. et al. Recent Antarctic ice mass loss from radar interferometry
 # and regional climate modelling. Nature Geosci 1, 106-110 (2008). https://doi.org/10.1038/ngeo102
@@ -140,22 +144,22 @@ else:
     # and alpha (opacity) corresponds to Forcing (opaque for 2300, semi-transparent for Repeat).
     # Hydrofracture runs will all have their own panel, so no need for special plot settings for those.
     global_plot_settings = {
-            'hist': {'color': 'black', 'linestyle': 'solid', 'alpha': 1.},
-            'ctrlAE': {'color': 'black', 'linestyle': 'solid', 'alpha': 1.},
-            'expAE01': {'color': 'tab:gray', 'linestyle': 'dashed', 'alpha': 0.6},
-            'expAE02': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1.},
-            'expAE03': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1.},
-            'expAE04': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1.},
-            'expAE05': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1.},
-            'expAE06': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1.},
-            'expAE07': {'color': 'tab:gray', 'linestyle': 'solid', 'alpha': 0.6},
-            'expAE08': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 0.6},
-            'expAE09': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 0.6},
-            'expAE10': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1},
-            'expAE11': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1.},
-            'expAE12': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1.},
-            'expAE13': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1.},
-            'expAE14': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1.}
+            'hist': {'color': 'black', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
+            'ctrlAE': {'color': 'black', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
+            'expAE01': {'color': 'tab:gray', 'linestyle': 'dashed', 'alpha': 0.6, 'tier': '1'},
+            'expAE02': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
+            'expAE03': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
+            'expAE04': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
+            'expAE05': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
+            'expAE06': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1., 'tier': '1'},
+            'expAE07': {'color': 'tab:gray', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
+            'expAE08': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
+            'expAE09': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
+            'expAE10': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1, 'tier': '2a'},
+            'expAE11': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'},
+            'expAE12': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'},
+            'expAE13': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'},
+            'expAE14': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'}
             }
     # Determine plot settings for each run based on the above dict.
     for run_item in run_dict:
@@ -164,9 +168,14 @@ else:
                 run_dict[run_item]['color'] = global_plot_settings[scen_item]['color']
                 run_dict[run_item]['linestyle'] = global_plot_settings[scen_item]['linestyle']
                 run_dict[run_item]['alpha'] = global_plot_settings[scen_item]['alpha']
+                run_dict[run_item]['tier'] = global_plot_settings[scen_item]['tier']
 
-ncol = 2
-nrow = 1
+if options.regional:
+    ncol = 2
+    nrow = 1
+else:
+    ncol = 3
+    nrow = 1
 
 # Set up Figure 1: volume stats overview
 fig1, axs1 = plt.subplots(nrow, ncol, figsize=(8, 6), num=1, sharex=True, sharey=True)
@@ -189,7 +198,7 @@ else:
     sys.exit("ERROR: Unknown unit specified")
 
 
-def plotStat(fname, addToLegend=False):
+def plotStat(fname):
     if fname is None:
         return
     # If the cleaned file doesn't exist, plot the unclean version.
@@ -209,18 +218,26 @@ def plotStat(fname, addToLegend=False):
     name = fname
 
     # Hard-code some settings for ISMIP6 sensitivity tests.
-    if 'AE02' in fname:
-        axs = [axs1[0]]  # for list comprehension plotting, below
-    elif 'AE03' in fname:
-        axs = [axs1[1]]  # for list comprehension plotting, below
-    elif 'hist' in fname or 'ctrlAE' in fname:
-        axs = axs1
-    if 'gamma21000' in fname or 'm10/' in fname or 'no_thermal' in fname:
-       linestyle = 'dashed'
-    elif 'gamma9620' in fname or 'm1/' in fname:
-       linestyle = 'dotted'
+    if options.regional:
+        if 'AE02' in fname:
+            axs = [axs1[0]]  # for list comprehension plotting, below
+        elif 'AE03' in fname:
+            axs = [axs1[1]]  # for list comprehension plotting, below
+        elif 'hist' in fname or 'ctrlAE' in fname:
+            axs = axs1
+        if 'gamma21000' in fname or 'm10/' in fname or 'no_thermal' in fname:
+           linestyle = 'dashed'
+        elif 'gamma9620' in fname or 'm1/' in fname:
+           linestyle = 'dotted'
+        else:
+           linestyle = 'solid'
     else:
-       linestyle = 'solid'
+        if run_dict[fname]['tier'] == '1':
+           axs = [axs1[0]]
+        if run_dict[fname]['tier'] == '2':
+           axs = [axs1[1]]
+        if run_dict[fname]['tier'] == '3':
+           axs = [axs1[2]]
 
     f = Dataset(fname,'r')
     yr = f.variables['daysSinceStart'][:]/365.0
