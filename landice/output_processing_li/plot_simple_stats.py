@@ -254,7 +254,7 @@ def plotStat(fname):
         plot_var = np.concatenate((hist_plot_var, plot_var))
 
     # Fig 1: summary plot
-    if "Volume" in args.plot_var:
+    if "olume" in args.plot_var:  # leave out the "v" to make it case insensitive
         plot_var *= volUnitFactor
 
     plot_var = plot_var[:] - plot_var[0]
