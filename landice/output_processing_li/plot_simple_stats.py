@@ -15,7 +15,7 @@ from argparse import ArgumentParser
 import matplotlib.pyplot as plt
 
 rhoi = 910.0
-
+rhosw = 1028.
 
 print("** Gathering information.  (Invoke with --help for more details. All arguments are optional)")
 parser = ArgumentParser(description=__doc__)
@@ -192,6 +192,15 @@ elif args.units == "Gt":
 else:
     sys.exit("ERROR: Unknown unit specified")
 
+def VAF2seaLevel(vol):
+    return vol / volUnitFactor / 3.62e14 * rhoi / rhosw * 1000.
+
+def seaLevel2VAF(vol):
+    return vol * volUnitFactor * 3.62e14 * rhosw / rhoi / 1000. 
+
+def addSeaLevAx(axName):
+    seaLevAx = axName.secondary_yaxis('right', functions=(VAF2seaLevel, seaLevel2VAF))
+    seaLevAx.set_ylabel('Sea-level\nequivalent (mm)')
 
 def plotStat(fname):
     if fname is None:
@@ -279,6 +288,9 @@ def plotStat(fname):
 
 for file in in_files:
     plotStat(file)
+
+if "olumeAboveFloatation" in args.plot_var:
+     addSeaLevAx(axs1[-1])
 
 print("Generating plot.")
 fig1.tight_layout()
