@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 '''
-Script to plot common time-series from one or more landice regionalStats files.
+Script to plot desired time-series from landice global or regional stats files.
 Currently only useful for whole-AIS simulations.
 
-
-Matt Hoffman, 8/23/2022
+Trevor Hillebrand 11/2023
 '''
 
 from __future__ import absolute_import, division, print_function, unicode_literals
@@ -30,7 +29,9 @@ parser.add_option("-5", dest="file5inName", help="input filename", metavar="FILE
 parser.add_option("-6", dest="file6inName", help="input filename", metavar="FILENAME")
 parser.add_option("-u", dest="units", help="units for mass/volume: m3, kg, Gt", default="Gt", metavar="FILENAME")
 parser.add_option("-n", dest="fileRegionNames", help="region name filename.  If not specified, will attempt to read region names from file 1.", metavar="FILENAME")
-parser.add_option("-r", dest="plot_regions", help="indices of regions to plot. comma-separated", default=None)  # Ross, ASE, FRIS = 7,9,14
+parser.add_option("-r", dest="plot_regions", help=("indices of regions to plot. comma-separated.",
+                                                   "If not specified, will plot all available regions."),
+                  default=None)  # Ross, ASE, FRIS = 7,9,14
 parser.add_option("-v", dest="plot_var", help="name of variable to plot", default="regionalVolumeAboveFloatation")
 parser.add_option("--regional", dest="regional", help="Whether to plot regional stats", action='store_true')
 options, args = parser.parse_args()
@@ -50,6 +51,30 @@ print("Using volume/mass units of: ", massUnit)
 # Get nRegions and yr from first file
 f = Dataset(options.file1inName, 'r')
 yr = f.variables['daysSinceStart'][:]/365.0
+
+in_files = [options.file1inName, options.file2inName, options.file3inName,
+            options.file4inName, options.file5inName, options.file6inName]
+
+# Create a dictionary with entries run_file : {hist_file}
+# We will append plot setting to this later.
+run_dict = {}
+for file in in_files:
+    if file is None:
+        continue
+    if 'hist' in file:
+        hist_file = None
+    else:
+        hist_file = re.sub("expAE..", 'hist', file)
+        if 'cleaned' in hist_file and not os.path.isfile(hist_file):
+            tmpname = hist_file.removesuffix('.cleaned')
+            if os.path.isfile(tmpname):
+                print(f'{hist_file} does not exist, plotting {tmpname} instead.')
+                hist_file = tmpname
+            else:
+                print(f'{fname} and {tmpname} do not exist. Skipping.')
+                hist_file = None
+    run_dict[file] = {}
+    run_dict[file]['hist_file'] = hist_file
 # Antarctic data from:
 # Rignot, E., Bamber, J., van den Broeke, M. et al. Recent Antarctic ice mass loss from radar interferometry
 # and regional climate modelling. Nature Geosci 1, 106-110 (2008). https://doi.org/10.1038/ngeo102
@@ -80,30 +105,6 @@ ISMIP6basinInfo = {
         'ISMIP6BasinKA': {'name': 'Brunt-Stancomb', 'color': 'goldenrod', 'input': [42+26,(8**2+7**2)**0.5], 'outflow': [45+28,(4**2+2**2)**0.5], 'net':[-3-1,(9**2+8**2)**0.5], 'shelfMelt': [10.4]}
         }
 
-# Hard-code plot settings for ISMIP6 runs. These will only apply if plotting global stats,
-# as regional stats will need to use different colors for different regions.
-# Color corresponds to climate model, linestyle to scenario (solid for 8.5, dashed for 2.6),
-# and alpha (opacity) corresponds to Forcing (opaque for 2300, semi-transparent for Repeat).
-# Hydrofracture runs will all have their own panel, so no need for special plot settings for those.
-global_plot_settings = {
-        'hist': {'color': 'black', 'linestyle': 'solid', 'alpha': 1.},
-        'ctrlAE': {'color': 'black', 'linestyle': 'solid', 'alpha': 1.},
-        'expAE01': {'color': 'tab:gray', 'linestyle': 'dashed', 'alpha': 0.6},
-        'expAE02': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1.},
-        'expAE03': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1.},
-        'expAE04': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1.},
-        'expAE05': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1.},
-        'expAE06': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1.},
-        'expAE07': {'color': 'tab:gray', 'linestyle': 'solid', 'alpha': 0.6},
-        'expAE08': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 0.6},
-        'expAE09': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 0.6},
-        'expAE10': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1},
-        'expAE11': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1.},
-        'expAE12': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1.},
-        'expAE13': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1.},
-        'expAE14': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1.}
-        }
-
 if options.regional:
     nRegions = len(f.dimensions['nRegions'])
     if options.plot_regions is None:
@@ -123,7 +124,8 @@ if options.regional:
         thisString = rNamesIn[r, :].tobytes().decode('utf-8').strip()  # convert from char array to string
         rNamesOrig.append(''.join(filter(str.isalnum, thisString)))  # this bit removes non-alphanumeric chars
 
-    # Parse region names to more usable names, if available
+    # Parse region names to more usable names, if available.
+    # Assign colors to each region, using dictionary above.
     rNames = [None]*nRegions
     region_colors = [None]*nRegions
     for r in range(nRegions):
@@ -132,6 +134,38 @@ if options.regional:
             region_colors[r] = ISMIP6basinInfo[rNamesOrig[r]]['color']
         else:
             rNames[r] = rNamesOrig[r]
+
+else:
+    # Hard-code plot settings for ISMIP6 runs. These will only apply if plotting global stats,
+    # as regional stats will need to use different colors for different regions.
+    # Color corresponds to climate model, linestyle to scenario (solid for 8.5, dashed for 2.6),
+    # and alpha (opacity) corresponds to Forcing (opaque for 2300, semi-transparent for Repeat).
+    # Hydrofracture runs will all have their own panel, so no need for special plot settings for those.
+    global_plot_settings = {
+            'hist': {'color': 'black', 'linestyle': 'solid', 'alpha': 1.},
+            'ctrlAE': {'color': 'black', 'linestyle': 'solid', 'alpha': 1.},
+            'expAE01': {'color': 'tab:gray', 'linestyle': 'dashed', 'alpha': 0.6},
+            'expAE02': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1.},
+            'expAE03': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1.},
+            'expAE04': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1.},
+            'expAE05': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1.},
+            'expAE06': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1.},
+            'expAE07': {'color': 'tab:gray', 'linestyle': 'solid', 'alpha': 0.6},
+            'expAE08': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 0.6},
+            'expAE09': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 0.6},
+            'expAE10': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1},
+            'expAE11': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1.},
+            'expAE12': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1.},
+            'expAE13': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1.},
+            'expAE14': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1.}
+            }
+    # Determine plot settings for each run based on the above dict.
+    for run_item in run_dict:
+        for scen_item in global_plot_settings:
+            if scen_item in run_item:  #i.e., if the substring of the experiment name occurs in the run name
+                run_dict[run_item]['color'] = global_plot_settings[scen_item]['color']
+                run_dict[run_item]['linestyle'] = global_plot_settings[scen_item]['linestyle']
+                run_dict[run_item]['alpha'] = global_plot_settings[scen_item]['alpha']
 
 ncol = 2
 nrow = 1
@@ -195,8 +229,8 @@ def plotStat(fname, addToLegend=False):
     dt = f.variables['deltat'][:]/(3600.0*24.0*365.0) # in yr
     plot_var = f.variables[options.plot_var][:]
 
-    if run_dict[fname] is not None:
-        hist = Dataset(run_dict[fname], 'r')
+    if run_dict[fname]['hist_file'] is not None:
+        hist = Dataset(run_dict[fname]['hist_file'], 'r')
         hist_yr = hist.variables['daysSinceStart'][:]/365.0
         hist_dt = hist.variables['deltat'][:]/(3600.0*24.0*365.0) # in yr
         hist_plot_var = hist.variables[options.plot_var][:]
@@ -217,37 +251,14 @@ def plotStat(fname, addToLegend=False):
         nRegionsLocal = len(f.dimensions['nRegions'])
         if nRegionsLocal != nRegions:
             sys.exit(f"ERROR: Number of regions in file {fname} does not match number of regions in first input file!")
-        for r, color in zip(plot_regions, colors):
-            [ax.plot(yr, plot_var[:,r], linestyle=linestyle, color=color, linewidth=2) for ax in axs]
+        for r in plot_regions:
+            [ax.plot(yr, plot_var[:,r], linestyle=linestyle, color=region_colors[r], linewidth=2) for ax in axs]
     else:
-        [ax.plot(yr, plot_var, linestyle=linestyle, linewidth=2) for ax in axs]
+        [ax.plot(yr, plot_var, color=run_dict[fname]['color'],
+                 linestyle=run_dict[fname]['linestyle'],
+                 alpha=run_dict[fname]['alpha'], linewidth=2) for ax in axs]
 
     f.close()
-
-in_files = [options.file1inName, options.file2inName, options.file3inName,
-            options.file4inName, options.file5inName, options.file6inName]
-
-# Create a dictionary with entries run_file : hist_file
-run_dict = {}
-for file in in_files:
-    if file is None:
-        continue
-    if 'hist' in file:
-        hist_file = None
-    else:
-        hist_file = re.sub("expAE..", 'hist', file)
-        if 'cleaned' in hist_file and not os.path.isfile(hist_file):
-            tmpname = hist_file.removesuffix('.cleaned')
-            if os.path.isfile(tmpname):
-                print(f'{hist_file} does not exist, plotting {tmpname} instead.')
-                hist_file = tmpname
-            else:
-                print(f'{fname} and {tmpname} do not exist. Skipping.')
-                hist_file = None
-
-    run_dict[file] = hist_file
-
-print(run_dict)
 
 for file in in_files:
     plotStat(file)
