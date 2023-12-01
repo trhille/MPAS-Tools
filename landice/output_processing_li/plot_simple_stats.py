@@ -22,9 +22,10 @@ parser = ArgumentParser(description=__doc__)
 parser.add_argument("-f", dest="files", help="input filenames, space delimited", type=str, nargs='*', default="globalStats.nc", metavar="FILENAME")
 parser.add_argument("-u", dest="units", help="units for mass/volume: m3, kg, Gt", default="Gt", metavar="FILENAME")
 parser.add_argument("-n", dest="fileRegionNames", help="region name filename.  If not specified, will attempt to read region names from file 1.", metavar="FILENAME")
-parser.add_argument("-r", dest="plot_regions", help=("indices of regions to plot. comma-separated.",
-                                                   "If not specified, will plot all available regions."),
-                  default=None)  # Ross, ASE, FRIS = 7,9,14
+parser.add_argument("-r", dest="plot_regions", type=int, nargs='*',
+                    help=("indices of regions to plot. Space delimited.",
+                          "If not specified, will plot all available regions."),
+                    default=None)  # Ross, ASE, FRIS = 7,9,14
 parser.add_argument("-v", dest="plot_var", help="name of variable to plot", default="regionalVolumeAboveFloatation")
 parser.add_argument("--regional", dest="regional", help="Whether to plot regional stats", action='store_true')
 args = parser.parse_args()
@@ -105,7 +106,8 @@ if args.regional:
     if args.plot_regions is None:
         plot_regions = range(nRegions)
     else:
-        plot_regions = [int(i) for i in args.plot_regions.split(',')]
+        #plot_regions = [int(i) for i in args.plot_regions.split(',')]
+        plot_regions = args.plot_regions
 
     # Get region names from file
     if args.fileRegionNames:
