@@ -229,9 +229,9 @@ def plotStat(fname):
     else:
         if run_dict[fname]['tier'] == '1':
            axs = [axs1[0]]
-        if run_dict[fname]['tier'] == '2':
+        if run_dict[fname]['tier'] == '2a':
            axs = [axs1[1]]
-        if run_dict[fname]['tier'] == '3':
+        if run_dict[fname]['tier'] == '2b':
            axs = [axs1[2]]
 
     f = Dataset(fname,'r')
