@@ -196,21 +196,24 @@ else:
 def plotStat(fname):
     if fname is None:
         return
-    # If the cleaned file doesn't exist, plot the unclean version.
+    # If a cleaned file exists, plot that. Conversely, if a cleaned
+    # filed is specified but does not exist, plot the unclean version.
     # This is useful for hist files, which were added to the list
     # of files dynamically, but usually aren't cleaned.
-    if 'cleaned' in fname and not os.path.isfile(fname):
+    pltname = fname
+    if os.path.isfile(fname + '.cleaned'):
+        pltname = fname + '.cleaned'
+        print(f'Found cleaned file {pltname}. Plotting from that.')
+    elif 'cleaned' in fname and not os.path.isfile(fname):
         tmpname = fname.removesuffix('.cleaned')
         if os.path.isfile(tmpname):
             print(f'{fname} does not exist, plotting {tmpname} instead.')
-            fname = tmpname
+            pltname = tmpname
         else:
             print(f'{fname} and {tmpname} do not exist. Skipping.')
             return
 
-    print("Reading and plotting file: {}".format(fname))
-
-    name = fname
+    print("Reading and plotting file: {}".format(pltname))
 
     # Hard-code some settings for ISMIP6 sensitivity tests.
     if args.regional:
@@ -234,7 +237,7 @@ def plotStat(fname):
         if run_dict[fname]['tier'] == '2b':
            axs = [axs1[2]]
 
-    f = Dataset(fname,'r')
+    f = Dataset(pltname,'r')
     yr = f.variables['daysSinceStart'][:]/365.0
     dt = f.variables['deltat'][:]/(3600.0*24.0*365.0) # in yr
     plot_var = f.variables[args.plot_var][:]
