@@ -11,47 +11,40 @@ import os
 import re
 import numpy as np
 from netCDF4 import Dataset
-from optparse import OptionParser
+from argparse import ArgumentParser
 import matplotlib.pyplot as plt
 
 rhoi = 910.0
 
 
 print("** Gathering information.  (Invoke with --help for more details. All arguments are optional)")
-parser = OptionParser(description=__doc__)
-parser.add_option("-1", dest="file1inName", help="input filename", default="globalStats.nc", metavar="FILENAME")
-parser.add_option("-2", dest="file2inName", help="input filename", metavar="FILENAME")
-parser.add_option("-3", dest="file3inName", help="input filename", metavar="FILENAME")
-parser.add_option("-4", dest="file4inName", help="input filename", metavar="FILENAME")
-parser.add_option("-5", dest="file5inName", help="input filename", metavar="FILENAME")
-parser.add_option("-6", dest="file6inName", help="input filename", metavar="FILENAME")
-parser.add_option("-u", dest="units", help="units for mass/volume: m3, kg, Gt", default="Gt", metavar="FILENAME")
-parser.add_option("-n", dest="fileRegionNames", help="region name filename.  If not specified, will attempt to read region names from file 1.", metavar="FILENAME")
-parser.add_option("-r", dest="plot_regions", help=("indices of regions to plot. comma-separated.",
+parser = ArgumentParser(description=__doc__)
+parser.add_argument("-f", dest="files", help="input filenames, space delimited", type=str, nargs='*', default="globalStats.nc", metavar="FILENAME")
+parser.add_argument("-u", dest="units", help="units for mass/volume: m3, kg, Gt", default="Gt", metavar="FILENAME")
+parser.add_argument("-n", dest="fileRegionNames", help="region name filename.  If not specified, will attempt to read region names from file 1.", metavar="FILENAME")
+parser.add_argument("-r", dest="plot_regions", help=("indices of regions to plot. comma-separated.",
                                                    "If not specified, will plot all available regions."),
                   default=None)  # Ross, ASE, FRIS = 7,9,14
-parser.add_option("-v", dest="plot_var", help="name of variable to plot", default="regionalVolumeAboveFloatation")
-parser.add_option("--regional", dest="regional", help="Whether to plot regional stats", action='store_true')
-options, args = parser.parse_args()
+parser.add_argument("-v", dest="plot_var", help="name of variable to plot", default="regionalVolumeAboveFloatation")
+parser.add_argument("--regional", dest="regional", help="Whether to plot regional stats", action='store_true')
+args = parser.parse_args()
 
 print("Using ice density of {} kg/m3 if required for unit conversions".format(rhoi))
 
-if options.units == "m3":
+if args.units == "m3":
    massUnit = "m$^3$"
-elif options.units == "kg":
+elif args.units == "kg":
    massUnit = "kg"
-elif options.units == "Gt":
+elif args.units == "Gt":
    massUnit = "Gt"
 else:
    sys.exit("Unknown mass/volume units")
 print("Using volume/mass units of: ", massUnit)
 
+in_files = args.files
 # Get nRegions and yr from first file
-f = Dataset(options.file1inName, 'r')
+f = Dataset(in_files[0], 'r')
 yr = f.variables['daysSinceStart'][:]/365.0
-
-in_files = [options.file1inName, options.file2inName, options.file3inName,
-            options.file4inName, options.file5inName, options.file6inName]
 
 # Create a dictionary with entries run_file : {hist_file}
 # We will append plot setting to this later.
@@ -76,7 +69,7 @@ for file in in_files:
                 hist_file = None
     run_dict[file] = {}
     run_dict[file]['hist_file'] = hist_file
-print(run_dict)
+
 # Antarctic data from:
 # Rignot, E., Bamber, J., van den Broeke, M. et al. Recent Antarctic ice mass loss from radar interferometry
 # and regional climate modelling. Nature Geosci 1, 106-110 (2008). https://doi.org/10.1038/ngeo102
@@ -107,16 +100,16 @@ ISMIP6basinInfo = {
         'ISMIP6BasinKA': {'name': 'Brunt-Stancomb', 'color': 'goldenrod', 'input': [42+26,(8**2+7**2)**0.5], 'outflow': [45+28,(4**2+2**2)**0.5], 'net':[-3-1,(9**2+8**2)**0.5], 'shelfMelt': [10.4]}
         }
 
-if options.regional:
+if args.regional:
     nRegions = len(f.dimensions['nRegions'])
-    if options.plot_regions is None:
+    if args.plot_regions is None:
         plot_regions = range(nRegions)
     else:
-        plot_regions = [int(i) for i in options.plot_regions.split(',')]
+        plot_regions = [int(i) for i in args.plot_regions.split(',')]
 
     # Get region names from file
-    if options.fileRegionNames:
-       fn = Dataset(options.fileRegionNames, 'r')
+    if args.fileRegionNames:
+       fn = Dataset(args.fileRegionNames, 'r')
        rNamesIn = fn.variables['regionNames'][:]
     else:
        rNamesIn = f.variables['regionNames'][:]
@@ -170,7 +163,7 @@ else:
                 run_dict[run_item]['alpha'] = global_plot_settings[scen_item]['alpha']
                 run_dict[run_item]['tier'] = global_plot_settings[scen_item]['tier']
 
-if options.regional:
+if args.regional:
     ncol = 2
     nrow = 1
 else:
@@ -182,16 +175,16 @@ fig1, axs1 = plt.subplots(nrow, ncol, figsize=(8, 6), num=1, sharex=True, sharey
 for ax in axs1:
     ax.grid()
     ax.set_xlabel('Year')
-axs1[0].set_ylabel(f'Cumulative mass change ({options.units})')
+axs1[0].set_ylabel(f'Cumulative mass change ({args.units})')
 
 # Set up unit conversion factors to be used when reading variables
-if options.units == "m3":
+if args.units == "m3":
     volUnitFactor = 1.0
     massUnitFactor = 1.0 / rhoi
-elif options.units == "kg":
+elif args.units == "kg":
     volUnitFactor = rhoi
     massUnitFactor = 1.0
-elif options.units == "Gt":
+elif args.units == "Gt":
     volUnitFactor = rhoi / 1.0e12
     massUnitFactor = 1.0 / 1.0e12
 else:
@@ -218,7 +211,7 @@ def plotStat(fname):
     name = fname
 
     # Hard-code some settings for ISMIP6 sensitivity tests.
-    if options.regional:
+    if args.regional:
         if 'AE02' in fname:
             axs = [axs1[0]]  # for list comprehension plotting, below
         elif 'AE03' in fname:
@@ -242,13 +235,13 @@ def plotStat(fname):
     f = Dataset(fname,'r')
     yr = f.variables['daysSinceStart'][:]/365.0
     dt = f.variables['deltat'][:]/(3600.0*24.0*365.0) # in yr
-    plot_var = f.variables[options.plot_var][:]
+    plot_var = f.variables[args.plot_var][:]
 
     if run_dict[fname]['hist_file'] is not None:
         hist = Dataset(run_dict[fname]['hist_file'], 'r')
         hist_yr = hist.variables['daysSinceStart'][:]/365.0
         hist_dt = hist.variables['deltat'][:]/(3600.0*24.0*365.0) # in yr
-        hist_plot_var = hist.variables[options.plot_var][:]
+        hist_plot_var = hist.variables[args.plot_var][:]
 
         # Concatenate hist data with exp data
         yr = np.concatenate((hist_yr, yr))
@@ -256,11 +249,11 @@ def plotStat(fname):
         plot_var = np.concatenate((hist_plot_var, plot_var))
 
     # Fig 1: summary plot
-    if "Volume" in options.plot_var:
+    if "Volume" in args.plot_var:
         plot_var *= volUnitFactor
 
     plot_var = plot_var[:] - plot_var[0]
-    if options.regional:
+    if args.regional:
         dtnR = np.tile(dt.reshape(len(dt),1), (1,nRegions))  # repeated per region with dim of nt,nRegions
         nRegionsLocal = len(f.dimensions['nRegions'])
         if nRegionsLocal != nRegions:
