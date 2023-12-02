@@ -27,6 +27,7 @@ parser.add_argument("-r", dest="plot_regions", type=int, nargs='*',
                           "If not specified, will plot all available regions."),
                     default=None)  # Ross, ASE, FRIS = 7,9,14
 parser.add_argument("-v", dest="plot_var", help="name of variable to plot", default="regionalVolumeAboveFloatation")
+parser.add_argument('-s', dest='save_filename', default=None, help='Path to save .png to, if desired.')
 parser.add_argument("--regional", dest="regional", help="Whether to plot regional stats", action='store_true')
 args = parser.parse_args()
 
@@ -173,7 +174,7 @@ else:
     nrow = 1
 
 # Set up Figure 1: volume stats overview
-fig1, axs1 = plt.subplots(nrow, ncol, figsize=(4*ncol, 6*nrow), num=1, sharex=True, sharey=True)
+fig1, axs1 = plt.subplots(nrow, ncol, figsize=(4*ncol, 4*nrow), num=1, sharex=True, sharey=True)
 for ax in axs1:
     ax.grid()
     ax.set_xlabel('Year')
@@ -294,5 +295,7 @@ if "olumeAboveFloatation" in args.plot_var:
 
 print("Generating plot.")
 fig1.tight_layout()
+if args.save_filename is not None:
+    fig1.savefig(args.save_filename, dpi=400, bbox_inches='tight')
 plt.show()
 
