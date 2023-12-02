@@ -28,6 +28,7 @@ parser.add_argument("-r", dest="plot_regions", type=int, nargs='*',
                     default=None)  # Ross, ASE, FRIS = 7,9,14
 parser.add_argument("-v", dest="plot_var", help="name of variable to plot", default="regionalVolumeAboveFloatation")
 parser.add_argument('-s', dest='save_filename', default=None, help='Path to save .png to, if desired.')
+parser.add_argument('--start_year', dest='start_year', default=0., type=float, help='Year value to assign at beginning of time series.')
 parser.add_argument("--regional", dest="regional", help="Whether to plot regional stats", action='store_true')
 args = parser.parse_args()
 
@@ -274,14 +275,14 @@ def plotStat(fname):
         if nRegionsLocal != nRegions:
             sys.exit(f"ERROR: Number of regions in file {fname} does not match number of regions in first input file!")
         for r in plot_regions:
-            lines, = [ax.plot(yr, plot_var[:,r], linestyle=linestyle,
+            lines, = [ax.plot(args.start_year + yr, plot_var[:,r], linestyle=linestyle,
                           color=region_colors[r], linewidth=2,
                           label=rNames[r]) for ax in axs]
         if linestyle == 'solid':  # Only add solid curves to legend to avoid repetition
             axs1[0].legend()
 
     else:
-        [ax.plot(yr, plot_var, color=run_dict[fname]['color'],
+        [ax.plot(args.start_year + yr, plot_var, color=run_dict[fname]['color'],
                  linestyle=run_dict[fname]['linestyle'],
                  alpha=run_dict[fname]['alpha'], linewidth=2) for ax in axs]
 
