@@ -30,6 +30,9 @@ parser.add_argument("-v", dest="plot_var", help="name of variable to plot", defa
 parser.add_argument('-s', dest='save_filename', default=None, help='Path to save .png to, if desired.')
 parser.add_argument('--start_year', dest='start_year', default=0., type=float, help='Year value to assign at beginning of time series.')
 parser.add_argument("--regional", dest="regional", help="Whether to plot regional stats", action='store_true')
+parser.add_argument("--sensitivity", dest="sensitivity",
+                    help="Whether this is a sensitivity test vs a core ISMIP6 experiment",
+                    action='store_true')
 args = parser.parse_args()
 
 print("Using ice density of {} kg/m3 if required for unit conversions".format(rhoi))
@@ -167,19 +170,29 @@ else:
                 run_dict[run_item]['alpha'] = global_plot_settings[scen_item]['alpha']
                 run_dict[run_item]['tier'] = global_plot_settings[scen_item]['tier']
 
-if args.regional:
+if args.sensitivity and not args.regional:
+    ncol = 1
+    nrow = 1
+    col_scale = 6
+    row_scale = 4
+elif args.regional:
     ncol = 2
     nrow = 1
+    col_scale = 4
+    row_scale = 4
 else:
     ncol = 3
     nrow = 1
+    col_scale = 4
+    row_scale = 4
 
 # Set up Figure 1: volume stats overview
-fig1, axs1 = plt.subplots(nrow, ncol, figsize=(4*ncol, 4*nrow), num=1, sharex=True, sharey=True)
+fig1, axs1 = plt.subplots(nrow, ncol, figsize=(col_scale*ncol, row_scale*nrow), num=1, sharex=True, sharey=True)
+if args.sensitivity and not args.regional:
+    axs1 = [axs1]
 for ax in axs1:
     ax.grid()
     ax.set_xlabel('Year')
-axs1[0].set_ylabel(f'Cumulative mass change ({args.units})')
 
 # Set up unit conversion factors to be used when reading variables
 if args.units == "m3":
@@ -189,10 +202,14 @@ elif args.units == "kg":
     volUnitFactor = rhoi
     massUnitFactor = 1.0
 elif args.units == "Gt":
-    volUnitFactor = rhoi / 1.0e12
-    massUnitFactor = 1.0 / 1.0e12
+    # more convenient to display as 10^6 Gt
+    args.units = "10$^6$ Gt"
+    volUnitFactor = rhoi / 1.e6 / 1.0e12
+    massUnitFactor = 1.0 / 1.e6 / 1.0e12
 else:
     sys.exit("ERROR: Unknown unit specified")
+
+axs1[0].set_ylabel(f'Cumulative change in mass\nabove floatation ({args.units})')
 
 def VAF2seaLevel(vol):
     return vol / volUnitFactor / 3.62e14 * rhoi / rhosw * 1000.
@@ -227,6 +244,16 @@ def plotStat(fname):
     print("Reading and plotting file: {}".format(pltname))
 
     # Hard-code some settings for ISMIP6 sensitivity tests.
+    if args.sensitivity:
+        if 'gamma21000' in fname or 'm10/' in fname or 'no_thermal' in fname:
+            linestyle = 'dashed'
+        elif 'gamma9620' in fname or 'm1/' in fname:
+            linestyle = 'dotted'
+        else:
+            linestyle = 'solid'
+        if not args.regional:
+             axs = [axs1[0]]
+
     if args.regional:
         if 'AE02' in fname:
             axs = [axs1[0]]  # for list comprehension plotting, below
@@ -234,13 +261,8 @@ def plotStat(fname):
             axs = [axs1[1]]  # for list comprehension plotting, below
         elif 'hist' in fname or 'ctrlAE' in fname:
             axs = axs1
-        if 'gamma21000' in fname or 'm10/' in fname or 'no_thermal' in fname:
-           linestyle = 'dashed'
-        elif 'gamma9620' in fname or 'm1/' in fname:
-           linestyle = 'dotted'
-        else:
-           linestyle = 'solid'
-    else:
+
+    if not args.sensitivity and not args.regional:
         if run_dict[fname]['tier'] == '1':
            axs = [axs1[0]]
         if run_dict[fname]['tier'] == '2a':
@@ -282,8 +304,13 @@ def plotStat(fname):
             axs1[0].legend()
 
     else:
+        if args.sensitivity:
+            lstyle = linestyle
+        else:
+            lstyle = run_dict[fname]['linestyle']
+
         [ax.plot(args.start_year + yr, plot_var, color=run_dict[fname]['color'],
-                 linestyle=run_dict[fname]['linestyle'],
+                 linestyle=lstyle,
                  alpha=run_dict[fname]['alpha'], linewidth=2) for ax in axs]
 
     f.close()
