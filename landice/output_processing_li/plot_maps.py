@@ -190,8 +190,8 @@ for ii, run in enumerate(runs):
     triang.set_mask(triMask)
 
     # set up figure for this run
-    figs[run] = plt.figure()
-    figs[run].suptitle(run)
+    figs[run] = plt.figure(figsize=(9,6.5))
+    #figs[run].suptitle(run)
     nRows = len(variables)
     nCols = len(timeLevs) + 1
 
@@ -304,10 +304,19 @@ for ii, run in enumerate(runs):
                                   triang, var_to_plot[timeLev, :], cmap=colormap,
                                   shading='flat', norm=norm))
             axs[index].set_aspect('equal')
-            axs[index].set_title(f'year = {yr[timeLev]:0.2f}')
+            #axs[index].set_title(f'year = {yr[timeLev]:0.2f}')
 
-        cbars.append(Colorbar(ax=cbar_ax, mappable=varPlot[run][variable][0], orientation='vertical',
-                 label=f'{colorbar_label_prefix}{variable} (${units}$)'))
+
+        cbar = Colorbar(ax=cbar_ax, mappable=varPlot[run][variable][0], orientation='vertical',
+                        )
+        cbar.set_label('Surface speed (m yr$^{-1}$)', size=16)
+                 #label=f'{colorbar_label_prefix}{variable} (${units}$)')
+        ticks = np.linspace(-1, 4, 6, dtype=int)
+        cbar.set_ticks(ticks)
+        cbar.set_ticklabels(['10$^{-1}$', '10$^{0}$',
+                             '10$^{1}$', '10$^{2}$',
+                             '10$^{3}$', '10$^{4}$'], fontsize=16)
+        cbars.append(cbar)
 
     figs[run].tight_layout()
     if args.saveNames is not None:
