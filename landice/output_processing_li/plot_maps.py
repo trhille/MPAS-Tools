@@ -109,6 +109,7 @@ if args.saveNames is not None:
 # These can be overridden by the -c flag.
 defaultColors = {'thickness' : 'Blues',
                  'surfaceSpeed' : 'plasma',
+                 'observedSpeed' : 'plasma',
                  'basalSpeed' : 'plasma',
                  'bedTopography' : 'BrBG',
                  'floatingBasalMassBalApplied' : 'cividis'
@@ -216,7 +217,11 @@ for ii, run in enumerate(runs):
         zip(variables, log_plot, colormaps, cbar_axs, vmins, vmaxs)):
         if variable == 'observedSpeed':
             var_to_plot = np.sqrt(f.variables['observedSurfaceVelocityX'][:]**2 +
-                                  f.variables['observedSurfaceVelocityY'][:]**2)
+                                  f.variables['observedSurfaceVelocityY'][:]**2) * \
+                          (f.variables['thickness'][:] > 1.0)
+        elif variable == 'surfaceSpeed' and 'surfaceSpeed' not in f.variables.keys():
+            var_to_plot = np.sqrt(f.variables['uReconstructX'][:,:,0]**2 +
+                                  f.variables['uReconstructY'][:,:,0]**2)
         else:
             var_to_plot = f.variables[variable][:]
 
@@ -309,13 +314,23 @@ for ii, run in enumerate(runs):
 
         cbar = Colorbar(ax=cbar_ax, mappable=varPlot[run][variable][0], orientation='vertical',
                         )
-        cbar.set_label('Surface speed (m yr$^{-1}$)', size=16)
+        if variable == 'observedSpeed':
+            cbar.set_label('Observed surface speed (m yr$^{-1}$)', size=16)
+        else:
+            cbar.set_label('Modeled surface speed (m yr$^{-1}$)', size=16)
                  #label=f'{colorbar_label_prefix}{variable} (${units}$)')
-        ticks = np.linspace(-1, 4, 6, dtype=int)
+#        if variable == 'observedSpeed':
+        ticks = list(np.linspace(float(vmin), float(vmax), 5, dtype=int)) + [float(vmax)]
         cbar.set_ticks(ticks)
         cbar.set_ticklabels(['10$^{-1}$', '10$^{0}$',
                              '10$^{1}$', '10$^{2}$',
-                             '10$^{3}$', '10$^{4}$'], fontsize=16)
+                             '10$^{3}$', '5 x 10$^{3}$'], fontsize=16)
+#        else:
+#            ticks = np.linspace(float(vmin), float(vmax), 6, dtype=int)
+#            cbar.set_ticks(ticks)
+#            cbar.set_ticklabels(['10$^{-1}$', '10$^{0}$',
+#                                 '10$^{1}$', '10$^{2}$',
+#                                 '10$^{3}$', '10$^{4}$'], fontsize=16)
         cbars.append(cbar)
 
     figs[run].tight_layout()
