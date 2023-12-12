@@ -33,6 +33,8 @@ parser.add_argument("--regional", dest="regional", help="Whether to plot regiona
 parser.add_argument("--sensitivity", dest="sensitivity",
                     help="Whether this is a sensitivity test vs a core ISMIP6 experiment",
                     action='store_true')
+parser.add_argument("--plot_obs", dest="plot_obs", help="Whether to plot observations", action='store_true')
+parser.add_argument("--hist", dest="hist", help="Whether this is a historical run only", action='store_true')
 args = parser.parse_args()
 
 print("Using ice density of {} kg/m3 if required for unit conversions".format(rhoi))
@@ -175,6 +177,11 @@ if args.sensitivity and not args.regional:
     nrow = 1
     col_scale = 6
     row_scale = 4
+elif args.hist:
+    ncol = 1
+    nrow = 1
+    col_scale = 6
+    row_scale = 4 
 elif args.regional:
     ncol = 2
     nrow = 1
@@ -190,9 +197,12 @@ else:
 fig1, axs1 = plt.subplots(nrow, ncol, figsize=(col_scale*ncol, row_scale*nrow), num=1, sharex=True, sharey=True)
 if args.sensitivity and not args.regional:
     axs1 = [axs1]
+elif args.hist:
+    axs1 = [axs1]
 for ax in axs1:
     ax.grid()
-    ax.set_xlabel('Year')
+    ax.set_xlabel('Year', fontsize=13)
+    ax.tick_params(axis='both', which='major', labelsize=12)
 
 # Set up unit conversion factors to be used when reading variables
 if args.units == "m3":
@@ -202,14 +212,19 @@ elif args.units == "kg":
     volUnitFactor = rhoi
     massUnitFactor = 1.0
 elif args.units == "Gt":
-    # more convenient to display as 10^6 Gt
-    args.units = "10$^6$ Gt"
-    volUnitFactor = rhoi / 1.e6 / 1.0e12
-    massUnitFactor = 1.0 / 1.e6 / 1.0e12
+    if "olumeAboveFloatation" in args.plot_var:
+        # more convenient to display as 10^6 Gt
+        args.units = "10$^6$ Gt"
+        volUnitFactor = rhoi / 1.e6 / 1.0e12
+        massUnitFactor = 1.0 / 1.e6 / 1.0e12
+        axs1[0].set_ylabel(f'Cumulative change in mass\nabove floatation ({args.units})')
+    else:
+        volUnitFactor = rhoi / 1.0e12
+        massUnitFactor = 1.0 / 1.0e12
+        if "roundedIceVolume" in args.plot_var:
+            axs1[0].set_ylabel(f'Grounded ice mass change ({args.units})', fontsize=13)
 else:
     sys.exit("ERROR: Unknown unit specified")
-
-axs1[0].set_ylabel(f'Cumulative change in mass\nabove floatation ({args.units})')
 
 def VAF2seaLevel(vol):
     return vol / volUnitFactor / 3.62e14 * rhoi / rhosw * 1000.
@@ -260,7 +275,10 @@ def plotStat(fname):
         elif 'AE03' in fname:
             axs = [axs1[1]]  # for list comprehension plotting, below
         elif 'hist' in fname or 'ctrlAE' in fname:
-            axs = axs1
+            if args.hist:
+                axs = [axs1[0]]
+            else:
+                axs = axs1
 
     if not args.sensitivity and not args.regional:
         if run_dict[fname]['tier'] == '1':
@@ -300,8 +318,13 @@ def plotStat(fname):
             lines, = [ax.plot(args.start_year + yr, plot_var[:,r], linestyle=linestyle,
                           color=region_colors[r], linewidth=2,
                           label=rNames[r]) for ax in axs]
+            if args.plot_obs:
+                [mn, sig] = ISMIP6basinInfo[rNamesOrig[r]]['net']
+                [ax.fill_between(args.start_year + yr, yr*(mn-sig), yr*(mn+sig),
+                                 color=region_colors[r], alpha=0.2) for ax in axs]
         if linestyle == 'solid':  # Only add solid curves to legend to avoid repetition
             axs1[0].legend()
+
 
     else:
         if args.sensitivity:
@@ -312,6 +335,16 @@ def plotStat(fname):
         [ax.plot(args.start_year + yr, plot_var, color=run_dict[fname]['color'],
                  linestyle=lstyle,
                  alpha=run_dict[fname]['alpha'], linewidth=2) for ax in axs]
+        if args.plot_obs:
+            mnTot=0.0
+            sigTot = 0.0
+            for reg in ISMIP6basinInfo:
+                [mn, sig] = ISMIP6basinInfo[reg]['net']
+                mnTot += mn
+                sigTot += sig**2
+            sigTot = sigTot**0.5
+            [ax.fill_between(args.start_year + yr, yr*(mnTot-sigTot),
+                             yr*(mnTot+sigTot), color='k', alpha=0.2) for ax in axs]
 
     f.close()
 

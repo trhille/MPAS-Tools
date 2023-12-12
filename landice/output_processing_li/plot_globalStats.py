@@ -26,7 +26,6 @@ parser.add_option("-6", dest="file6inName", help="input filename", metavar="FILE
 parser.add_option("-7", dest="file7inName", help="input filename", metavar="FILENAME")
 parser.add_option("-u", dest="units", help="units for mass/volume: m3, kg, Gt", default="Gt", metavar="FILENAME")
 parser.add_option("-c", dest="plotChange", help="plot time series as change from initial.  (not applied to GL flux or calving flux)  Without this option, the full magnitude of time series is used", action='store_true', default=False)
-parser.add_option("-s", dest="saveName", help="filename to save plot", default=None, metavar="FILENAME")
 options, args = parser.parse_args()
 
 print("Using ice density of {} kg/m3 if required for unit conversions".format(rhoi))
@@ -65,7 +64,7 @@ axX = axVol
 
 axVAF = fig.add_subplot(nrow, ncol, 2, sharex=axX)
 plt.xlabel('Year')
-axVAF.set_ylabel('Total change in volume\nabove floatation ($10^{15}$ m$^3$)')
+plt.ylabel(f'VAF{plotChangeStr} ({massUnit})')
 plt.grid()
 
 axVolGround = fig.add_subplot(nrow, ncol, 3, sharex=axX)
@@ -120,18 +119,6 @@ def plotStat(fname):
     dt = f.variables['deltat'][:]/3.15e7
     print(yr.max())
 
-    if 'AE02' in fname:
-       color='tab:blue'
-    elif 'AE03' in fname:
-       color='tab:orange'
-
-    if 'gamma21000' in fname or 'm10/' in fname or 'no_thermal' in fname:
-       linestyle = 'dashed'
-    elif 'gamma9620' in fname or 'm1/' in fname:
-       linestyle = 'dotted'
-    else:
-       linestyle = 'solid'
-       
     vol = f.variables['totalIceVolume'][:] / scaleVol
     if options.plotChange:
         vol = vol - vol[0]
@@ -140,7 +127,7 @@ def plotStat(fname):
     VAF = f.variables['volumeAboveFloatation'][:] / scaleVol       
     if options.plotChange:
         VAF = VAF - VAF[0]
-    axVAF.plot(yr, VAF, label=name, color=color, linestyle=linestyle, linewidth=2)
+    axVAF.plot(yr, VAF, label=name)
     addSeaLevAx(axVAF)
 
     volGround = f.variables['groundedIceVolume'][:] / scaleVol
@@ -198,7 +185,5 @@ axCalvFlux.legend(loc='best', prop={'size': 6})
 
 print("Generating plot.")
 fig.tight_layout()
-if options.saveName is not None:
-    fig.savefig(options.saveName, format='png', dpi=400, bbox_inches='tight')
 plt.show()
 
