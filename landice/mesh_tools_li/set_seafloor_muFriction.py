@@ -36,7 +36,13 @@ options, args = parser.parse_args()
 
 dataset = Dataset(options.nc_file, 'r+')
 regions = Dataset(options.regions_file, 'r')
+assert ( options.speed_threshold is not None,
+    "The --speed_threshold option is not set. You must set it to use this script!" )
+
 speed_threshold = float(options.speed_threshold)
+
+assert ( options.percentile is not None,
+    "The --percentile option is not set. You must set it to use this script!" )
 percentile = float(options.percentile)
 muFriction = dataset.variables['muFriction'][0, :]
 muFrictionNew = muFriction.copy()
@@ -75,7 +81,7 @@ keepCellMaskOrig = np.copy(keepCellMask)  # make a copy to edit that can be edit
 for region in np.arange(regions.dimensions['nRegions'].size):
     region_mask = region_masks[:, region] == 1
     speed_mask = (spd * region_mask * keepCellMask * 3.154e7) > speed_threshold
-    seafloor_mu = np.quantile(muFriction[speed_mask], 0.05)
+    seafloor_mu = np.quantile(muFriction[speed_mask], percentile)
     replace_mu_mask = np.where( np.logical_and(
                                     np.logical_and((muFriction > seafloor_mu), 
                                     (keepCellMask == 0)), region_mask))
