@@ -260,10 +260,12 @@ def plotStat(fname):
 
     # Hard-code some settings for ISMIP6 sensitivity tests.
     if args.sensitivity:
-        if 'gamma21000' in fname or 'm10/' in fname or 'no_thermal' in fname:
+        if 'gamma21000' in fname or 'm10/' in fname or 'enthalpy' in fname:
             linestyle = 'dashed'
-        elif 'gamma9620' in fname or 'm1/' in fname:
+        elif 'gamma9620' in fname or 'm1/' in fname or 'no_thermal' in fname:
             linestyle = 'dotted'
+        elif "m3" in fname:
+            linestyle = 'dashdot'
         else:
             linestyle = 'solid'
         if not args.regional:
