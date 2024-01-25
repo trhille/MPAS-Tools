@@ -271,6 +271,11 @@ def plotStat(fname):
         if not args.regional:
              axs = [axs1[0]]
 
+    if "depth_integrated" in fname:
+        linewidth = 1
+    else:
+        linewidth = 2
+
     if args.regional:
         if 'AE02' in fname:
             axs = [axs1[0]]  # for list comprehension plotting, below
@@ -318,7 +323,7 @@ def plotStat(fname):
             sys.exit(f"ERROR: Number of regions in file {fname} does not match number of regions in first input file!")
         for r in plot_regions:
             lines, = [ax.plot(args.start_year + yr, plot_var[:,r], linestyle=linestyle,
-                          color=region_colors[r], linewidth=2,
+                          color=region_colors[r], linewidth=linewidth,
                           label=rNames[r]) for ax in axs]
             if args.plot_obs:
                 [mn, sig] = ISMIP6basinInfo[rNamesOrig[r]]['net']
@@ -336,7 +341,7 @@ def plotStat(fname):
 
         [ax.plot(args.start_year + yr, plot_var, color=run_dict[fname]['color'],
                  linestyle=lstyle,
-                 alpha=run_dict[fname]['alpha'], linewidth=2) for ax in axs]
+                 alpha=run_dict[fname]['alpha'], linewidth=linewidth) for ax in axs]
         if args.plot_obs:
             mnTot=0.0
             sigTot = 0.0
