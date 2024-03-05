@@ -329,7 +329,7 @@ def plotStat(fname):
                 [mn, sig] = ISMIP6basinInfo[rNamesOrig[r]]['net']
                 [ax.fill_between(args.start_year + yr, yr*(mn-sig), yr*(mn+sig),
                                  color=region_colors[r], alpha=0.2) for ax in axs]
-        if linestyle == 'solid':  # Only add solid curves to legend to avoid repetition
+        if linestyle == 'solid' and linewidth == 2:  # Only add solid curves to legend to avoid repetition
             axs1[0].legend()
 
 
