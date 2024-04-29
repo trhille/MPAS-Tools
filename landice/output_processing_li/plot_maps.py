@@ -307,7 +307,7 @@ for ii, run in enumerate(runs):
             varPlot[run][variable].append(
                               axs[index].tripcolor(
                                   triang, var_to_plot[timeLev, :], cmap=colormap,
-                                  shading='flat', norm=norm))
+                                  shading='flat', norm=norm, edgecolors="face"))
             axs[index].set_aspect('equal')
             #axs[index].set_title(f'year = {yr[timeLev]:0.2f}')
 
@@ -335,7 +335,7 @@ for ii, run in enumerate(runs):
 
     figs[run].tight_layout()
     if args.saveNames is not None:
-        figs[run].savefig(saveNames[ii], dpi=400, bbox_inches='tight')
+        figs[run].savefig(saveNames[ii], format="pdf", bbox_inches='tight')
     
     f.close()
 
