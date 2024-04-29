@@ -260,7 +260,7 @@ def plotStat(fname):
 
     # Hard-code some settings for ISMIP6 sensitivity tests.
     if args.sensitivity:
-        if 'gamma21000' in fname or 'm10/' in fname or 'enthalpy' in fname:
+        if 'gamma21000' in fname or 'm10' in fname or 'enthalpy' in fname:
             linestyle = 'dashed'
         elif 'gamma9620' in fname or 'm1/' in fname or 'no_thermal' in fname:
             linestyle = 'dotted'
@@ -271,7 +271,7 @@ def plotStat(fname):
         if not args.regional:
              axs = [axs1[0]]
 
-    if "depth_integrated" in fname:
+    if "depth_integrated" in fname or "3rd_order" in fname:
         linewidth = 1
     else:
         linewidth = 2
@@ -322,14 +322,17 @@ def plotStat(fname):
         if nRegionsLocal != nRegions:
             sys.exit(f"ERROR: Number of regions in file {fname} does not match number of regions in first input file!")
         for r in plot_regions:
+            if linestyle == 'solid' and linewidth == 2:  # Only add solid curves to legend to avoid repetition
+                label = rNames[r]
+            else:
+                label = None
             lines, = [ax.plot(args.start_year + yr, plot_var[:,r], linestyle=linestyle,
                           color=region_colors[r], linewidth=linewidth,
-                          label=rNames[r]) for ax in axs]
+                          label=label) for ax in axs]
             if args.plot_obs:
                 [mn, sig] = ISMIP6basinInfo[rNamesOrig[r]]['net']
                 [ax.fill_between(args.start_year + yr, yr*(mn-sig), yr*(mn+sig),
                                  color=region_colors[r], alpha=0.2) for ax in axs]
-        if linestyle == 'solid' and linewidth == 2:  # Only add solid curves to legend to avoid repetition
             axs1[0].legend()
 
 
@@ -364,6 +367,6 @@ if "olumeAboveFloatation" in args.plot_var:
 print("Generating plot.")
 fig1.tight_layout()
 if args.save_filename is not None:
-    fig1.savefig(args.save_filename, dpi=400, bbox_inches='tight')
+    fig1.savefig(args.save_filename, format="pdf", bbox_inches='tight')
 plt.show()
 
