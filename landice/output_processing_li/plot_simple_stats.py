@@ -168,36 +168,36 @@ if args.sensitivity and not args.regional:
     nrow = 1
     col_scale = 6
     row_scale = 4
+    sharey = [False]
 elif args.hist and args.regional:
     ncol = 2
     nrow = 1
     col_scale = 6
-    row_scale = 4 
+    row_scale = 4
+    sharey = [False, False] 
 elif args.regional:
     ncol = 3
     nrow = 1
     col_scale = 4
     row_scale = 4
+    sharey = [False, False, True]
 else:
     ncol = 3
     nrow = 1
     col_scale = 4
     row_scale = 4
+    sharey = [False, True, True]
 
 # Set up Figure 1: volume stats overview
 fig1 = plt.figure(figsize=(col_scale*ncol, row_scale*nrow), num=1)
 axs1 = []
-for ind in range(1, ncol * nrow + 1):
-    if ind > 2:
-       sharey = axs1[-1]
+for ind, share in zip(range(1, ncol * nrow + 1), sharey):
+    if share:
+        share_ax = axs1[-1]  # share with previous axis. Not very general
     else:
-       sharey = None
-    axs1.append(fig1.add_subplot(nrow, ncol, ind, sharey=sharey))
+        share_ax = None
+    axs1.append(fig1.add_subplot(nrow, ncol, ind, sharey=share_ax))
 
-#if args.sensitivity and not args.regional:
-#    axs1 = [axs1]
-#elif args.hist:
-#    axs1 = [axs1]
 for ax in axs1:
     ax.grid()
     ax.set_xlabel('Year', fontsize=13)
