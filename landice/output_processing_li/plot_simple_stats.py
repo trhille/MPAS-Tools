@@ -19,7 +19,7 @@ rhosw = 1028.
 
 print("** Gathering information.  (Invoke with --help for more details. All arguments are optional)")
 parser = ArgumentParser(description=__doc__)
-parser.add_argument("-f", dest="files", help="input filenames, space delimited", type=str, nargs='*', default="globalStats.nc", metavar="FILENAME")
+parser.add_argument("-d", dest="directories", help="input directories; space delimited", type=str, nargs='*', default=None, metavar="FILENAME")
 parser.add_argument("-u", dest="units", help="units for mass/volume: m3, kg, Gt", default="Gt", metavar="FILENAME")
 parser.add_argument("-n", dest="fileRegionNames", help="region name filename.  If not specified, will attempt to read region names from file 1.", metavar="FILENAME")
 parser.add_argument("-r", dest="plot_regions", type=int, nargs='*',
@@ -49,34 +49,27 @@ else:
    sys.exit("Unknown mass/volume units")
 print("Using volume/mass units of: ", massUnit)
 
-in_files = args.files
+in_directories = args.directories
 # Get nRegions and yr from first file
-f = Dataset(in_files[0], 'r')
+f = Dataset(in_directories[0] + "/globalStats.nc", 'r')
 yr = f.variables['daysSinceStart'][:]/365.0
+f.close()
 
-# Create a dictionary with entries run_file : {hist_file}
+# Create a dictionary with entries run_file : {hist_directory}
 # We will append plot setting to this later.
 run_dict = {}
-for file in in_files:
-    if file is None:
+for directory in in_directories:
+    if directory is None:
         continue
-    if 'hist' in file:
-        hist_file = None
+    if 'hist' in directory:
+        hist_directory = None
     else:
-        if "ctrl" in file:
-            hist_file = re.sub("ctrlAE", "hist", file)
+        if "ctrl" in directory:
+            hist_directory = re.sub("ctrlAE", "hist", directory)
         else:
-            hist_file = re.sub("expAE..", 'hist', file)
-        if 'cleaned' in hist_file and not os.path.isfile(hist_file):
-            tmpname = hist_file.removesuffix('.cleaned')
-            if os.path.isfile(tmpname):
-                print(f'{hist_file} does not exist, plotting {tmpname} instead.')
-                hist_file = tmpname
-            else:
-                print(f'{fname} and {tmpname} do not exist. Skipping.')
-                hist_file = None
-    run_dict[file] = {}
-    run_dict[file]['hist_file'] = hist_file
+            hist_directory = re.sub("expAE..", 'hist', directory)
+    run_dict[directory] = {}
+    run_dict[directory]['hist_directory'] = hist_directory
 
 # Antarctic data from:
 # Rignot, E., Bamber, J., van den Broeke, M. et al. Recent Antarctic ice mass loss from radar interferometry
@@ -109,19 +102,17 @@ ISMIP6basinInfo = {
         }
 
 if args.regional:
-    nRegions = len(f.dimensions['nRegions'])
+    fn = Dataset(args.fileRegionNames, 'r')
+    nRegions = len(fn.dimensions['nRegions'])
+    rNamesIn = fn.variables['regionNames'][:]
+    fn.close()
+
     if args.plot_regions is None:
         plot_regions = range(nRegions)
     else:
         #plot_regions = [int(i) for i in args.plot_regions.split(',')]
         plot_regions = args.plot_regions
 
-    # Get region names from file
-    if args.fileRegionNames:
-       fn = Dataset(args.fileRegionNames, 'r')
-       rNamesIn = fn.variables['regionNames'][:]
-    else:
-       rNamesIn = f.variables['regionNames'][:]
     # Process region names
     rNamesOrig = list()
     for r in range(nRegions):
@@ -139,51 +130,51 @@ if args.regional:
         else:
             rNames[r] = rNamesOrig[r]
 
-else:
-    # Hard-code plot settings for ISMIP6 runs. These will only apply if plotting global stats,
-    # as regional stats will need to use different colors for different regions.
-    # Color corresponds to climate model, linestyle to scenario (solid for 8.5, dashed for 2.6),
-    # and alpha (opacity) corresponds to Forcing (opaque for 2300, semi-transparent for Repeat).
-    # Hydrofracture runs will all have their own panel, so no need for special plot settings for those.
-    global_plot_settings = {
-            'hist': {'color': 'black', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-            'ctrlAE': {'color': 'black', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-            'expAE01': {'color': 'tab:gray', 'linestyle': 'dashed', 'alpha': 0.6, 'tier': '1'},
-            'expAE02': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-            'expAE03': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-            'expAE04': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-            'expAE05': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-            'expAE06': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '1'},
-            'expAE07': {'color': 'tab:gray', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
-            'expAE08': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
-            'expAE09': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
-            'expAE10': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1, 'tier': '2a'},
-            'expAE11': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'},
-            'expAE12': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'},
-            'expAE13': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'},
-            'expAE14': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'}
-            }
-    # Determine plot settings for each run based on the above dict.
-    for run_item in run_dict:
-        for scen_item in global_plot_settings:
-            if scen_item in run_item:  #i.e., if the substring of the experiment name occurs in the run name
-                run_dict[run_item]['color'] = global_plot_settings[scen_item]['color']
-                run_dict[run_item]['linestyle'] = global_plot_settings[scen_item]['linestyle']
-                run_dict[run_item]['alpha'] = global_plot_settings[scen_item]['alpha']
-                run_dict[run_item]['tier'] = global_plot_settings[scen_item]['tier']
+
+# Hard-code plot settings for ISMIP6 runs. These will only apply if plotting global stats,
+# as regional stats will need to use different colors for different regions.
+# Color corresponds to climate model, linestyle to scenario (solid for 8.5, dashed for 2.6),
+# and alpha (opacity) corresponds to Forcing (opaque for 2300, semi-transparent for Repeat).
+# Hydrofracture runs will all have their own panel, so no need for special plot settings for those.
+global_plot_settings = {
+        'hist': {'color': 'black', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
+        'ctrlAE': {'color': 'black', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
+        'expAE01': {'color': 'tab:gray', 'linestyle': 'dashed', 'alpha': 0.6, 'tier': '1'},
+        'expAE02': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
+        'expAE03': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
+        'expAE04': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
+        'expAE05': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
+        'expAE06': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '1'},
+        'expAE07': {'color': 'tab:gray', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
+        'expAE08': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
+        'expAE09': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
+        'expAE10': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1, 'tier': '2a'},
+        'expAE11': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'},
+        'expAE12': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'},
+        'expAE13': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'},
+        'expAE14': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'}
+        }
+# Determine plot settings for each run based on the above dict.
+for run_item in run_dict:
+    for scen_item in global_plot_settings:
+        if scen_item in run_item:  #i.e., if the substring of the experiment name occurs in the run name
+            run_dict[run_item]['color'] = global_plot_settings[scen_item]['color']
+            run_dict[run_item]['linestyle'] = global_plot_settings[scen_item]['linestyle']
+            run_dict[run_item]['alpha'] = global_plot_settings[scen_item]['alpha']
+            run_dict[run_item]['tier'] = global_plot_settings[scen_item]['tier']
 
 if args.sensitivity and not args.regional:
     ncol = 1
     nrow = 1
     col_scale = 6
     row_scale = 4
-elif args.hist:
-    ncol = 1
+elif args.hist and args.regional:
+    ncol = 2
     nrow = 1
     col_scale = 6
     row_scale = 4 
 elif args.regional:
-    ncol = 2
+    ncol = 3
     nrow = 1
     col_scale = 4
     row_scale = 4
@@ -194,11 +185,19 @@ else:
     row_scale = 4
 
 # Set up Figure 1: volume stats overview
-fig1, axs1 = plt.subplots(nrow, ncol, figsize=(col_scale*ncol, row_scale*nrow), num=1, sharex=True, sharey=True)
-if args.sensitivity and not args.regional:
-    axs1 = [axs1]
-elif args.hist:
-    axs1 = [axs1]
+fig1 = plt.figure(figsize=(col_scale*ncol, row_scale*nrow), num=1)
+axs1 = []
+for ind in range(1, ncol * nrow + 1):
+    if ind > 2:
+       sharey = axs1[-1]
+    else:
+       sharey = None
+    axs1.append(fig1.add_subplot(nrow, ncol, ind, sharey=sharey))
+
+#if args.sensitivity and not args.regional:
+#    axs1 = [axs1]
+#elif args.hist:
+#    axs1 = [axs1]
 for ax in axs1:
     ax.grid()
     ax.set_xlabel('Year', fontsize=13)
@@ -226,24 +225,29 @@ elif args.units == "Gt":
 else:
     sys.exit("ERROR: Unknown unit specified")
 
-def VAF2seaLevel(vol):
+def VAF_to_sea_level(vol):
     return vol / volUnitFactor / 3.62e14 * rhoi / rhosw * 1000.
 
-def seaLevel2VAF(vol):
+def sea_level_to_VAF(vol):
     return vol * volUnitFactor * 3.62e14 * rhosw / rhoi / 1000. 
 
-def addSeaLevAx(axName):
-    seaLevAx = axName.secondary_yaxis('right', functions=(VAF2seaLevel, seaLevel2VAF))
-    seaLevAx.set_ylabel('Sea-level\nequivalent (mm)')
-
-def plotStat(fname):
-    if fname is None:
+def add_sea_lev_ax(axName):
+    sea_lev_ax = axName.secondary_yaxis('right', functions=(VAF_to_sea_level, sea_level_to_VAF))
+    return sea_lev_ax
+def plot_stats(directory, file):
+    if directory is None:
         return
     # If a cleaned file exists, plot that. Conversely, if a cleaned
     # filed is specified but does not exist, plot the unclean version.
     # This is useful for hist files, which were added to the list
     # of files dynamically, but usually aren't cleaned.
-    pltname = fname
+    fname = directory + "/" + file + "Stats.nc"
+
+    if "regionalStats" in fname:
+        regional = True
+    else:
+        regional = False
+
     if os.path.isfile(fname + '.cleaned'):
         pltname = fname + '.cleaned'
         print(f'Found cleaned file {pltname}. Plotting from that.')
@@ -255,6 +259,8 @@ def plotStat(fname):
         else:
             print(f'{fname} and {tmpname} do not exist. Skipping.')
             return
+    else:
+        pltname = fname
 
     print("Reading and plotting file: {}".format(pltname))
 
@@ -276,35 +282,42 @@ def plotStat(fname):
     else:
         linewidth = 2
 
-    if args.regional:
+    if regional:
         if 'AE02' in fname:
-            axs = [axs1[0]]  # for list comprehension plotting, below
-        elif 'AE03' in fname:
             axs = [axs1[1]]  # for list comprehension plotting, below
+        elif 'AE03' in fname:
+            axs = [axs1[2]]  # for list comprehension plotting, below
         elif 'hist' in fname or 'ctrlAE' in fname:
             if args.hist:
-                axs = [axs1[0]]
+                axs = [axs1[1]]
             else:
                 axs = axs1
 
     if not args.sensitivity and not args.regional:
-        if run_dict[fname]['tier'] == '1':
+        if run_dict[directory]['tier'] == '1':
            axs = [axs1[0]]
-        if run_dict[fname]['tier'] == '2a':
+        if run_dict[directory]['tier'] == '2a':
            axs = [axs1[1]]
-        if run_dict[fname]['tier'] == '2b':
+        if run_dict[directory]['tier'] == '2b':
            axs = [axs1[2]]
 
     f = Dataset(pltname,'r')
     yr = f.variables['daysSinceStart'][:]/365.0
     dt = f.variables['deltat'][:]/(3600.0*24.0*365.0) # in yr
-    plot_var = f.variables[args.plot_var][:]
 
-    if run_dict[fname]['hist_file'] is not None:
-        hist = Dataset(run_dict[fname]['hist_file'], 'r')
+    # Deal with different variable names for global and regional stats
+    if regional:
+        plot_var_name = "regional" + args.plot_var[0].capitalize() + args.plot_var[1:]
+    else:
+        plot_var_name = args.plot_var
+
+    plot_var = f.variables[plot_var_name][:]
+
+    if run_dict[directory]['hist_directory'] is not None:
+        hist = Dataset(run_dict[directory]['hist_directory'] + "/" + file + "Stats.nc", 'r')
         hist_yr = hist.variables['daysSinceStart'][:]/365.0
         hist_dt = hist.variables['deltat'][:]/(3600.0*24.0*365.0) # in yr
-        hist_plot_var = hist.variables[args.plot_var][:]
+        hist_plot_var = hist.variables[plot_var_name][:]
 
         # Concatenate hist data with exp data
         yr = np.concatenate((hist_yr, yr))
@@ -316,7 +329,7 @@ def plotStat(fname):
         plot_var *= volUnitFactor
 
     plot_var = plot_var[:] - plot_var[0]
-    if args.regional:
+    if args.regional and regional:
         dtnR = np.tile(dt.reshape(len(dt),1), (1,nRegions))  # repeated per region with dim of nt,nRegions
         nRegionsLocal = len(f.dimensions['nRegions'])
         if nRegionsLocal != nRegions:
@@ -333,18 +346,20 @@ def plotStat(fname):
                 [mn, sig] = ISMIP6basinInfo[rNamesOrig[r]]['net']
                 [ax.fill_between(args.start_year + yr, yr*(mn-sig), yr*(mn+sig),
                                  color=region_colors[r], alpha=0.2) for ax in axs]
-            axs1[0].legend()
+            axs1[1].legend()
 
 
     else:
         if args.sensitivity:
             lstyle = linestyle
         else:
-            lstyle = run_dict[fname]['linestyle']
+            lstyle = run_dict[directory]['linestyle']
 
-        [ax.plot(args.start_year + yr, plot_var, color=run_dict[fname]['color'],
+        if args.regional and not regional:
+            axs = [axs1[0]]
+        [ax.plot(args.start_year + yr, plot_var, color=run_dict[directory]['color'],
                  linestyle=lstyle,
-                 alpha=run_dict[fname]['alpha'], linewidth=linewidth) for ax in axs]
+                 alpha=run_dict[directory]['alpha'], linewidth=linewidth) for ax in axs]
         if args.plot_obs:
             mnTot=0.0
             sigTot = 0.0
@@ -358,11 +373,19 @@ def plotStat(fname):
 
     f.close()
 
-for file in in_files:
-    plotStat(file)
+if args.regional:
+    files = ["global", "regional"]
+else:
+    files = ["global"]
+
+for directory in in_directories:
+    for file in files:
+        plot_stats(directory, file)
 
 if "olumeAboveFloatation" in args.plot_var:
-     addSeaLevAx(axs1[-1])
+    for ax in axs1:
+        sea_lev_ax = add_sea_lev_ax(ax)
+    sea_lev_ax.set_ylabel('Sea-level\nequivalent (mm)')
 
 print("Generating plot.")
 fig1.tight_layout()
