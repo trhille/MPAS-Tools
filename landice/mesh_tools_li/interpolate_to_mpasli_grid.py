@@ -687,7 +687,7 @@ if filetype=='cism':
      fieldInfo['ismip6shelfMelt_basin'] = {'InputName':'ismip6shelfMelt_basin', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['ismip6shelfMelt_deltaT'] = {'InputName':'ismip6shelfMelt_deltaT', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      # Fields used in Crane Gl data interpolation
-     fieldInfo['surfaceBerthier'] = {'InputName':'surfaceBerthier', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # TODO: Add geoid offset?
+     fieldInfo['surfaceBerthierAster'] = {'InputName':'surfaceBerthierAster', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}  # TODO: Add geoid offset?
      fieldInfo['surfaceBedMachine'] = {'InputName':'surface', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedSurfaceVelocityXLandSat'] = {'InputName':'vx_masked', 'scalefactor':1.0/(24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedSurfaceVelocityYLandSat'] = {'InputName':'vy_masked', 'scalefactor':1.0/(24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
