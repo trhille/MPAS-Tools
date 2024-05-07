@@ -694,6 +694,7 @@ if filetype=='cism':
      fieldInfo['observedSurfaceVelocityXMeasures'] = {'InputName':'vx', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedSurfaceVelocityYMeasures'] = {'InputName':'vy', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedSurfaceVelocityUncertaintyMeasures'] = {'InputName':'vErr', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['landSatMask'] =  {'InputName':'mask',  'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
 
 # -----------------
 elif filetype=='mpas':
