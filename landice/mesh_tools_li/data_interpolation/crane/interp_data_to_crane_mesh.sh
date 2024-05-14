@@ -237,4 +237,5 @@ ncap2 -A -s "float_mask = (surfaceBerthierAster < float_surface) * (bedTopograph
 ncap2 -A -s "thickness = float_mask * ( 1.0 / (1.0 - rhoi/rhosw) *
                  surfaceBerthierAster) + (1.0 - float_mask) *
                  (surfaceBerthierAster - bedTopography)" tmp.nc
+ncap2 -A -s "where(thickness < 0.0) thickness = 0.0" tmp.nc
 ncks -A -v thickness tmp.nc Crane.nc
