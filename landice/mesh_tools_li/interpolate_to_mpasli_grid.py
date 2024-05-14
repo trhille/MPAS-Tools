@@ -680,8 +680,6 @@ if filetype=='cism':
      fieldInfo['observedSurfaceVelocityX'] = {'InputName':'vx', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedSurfaceVelocityY'] = {'InputName':'vy', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedSurfaceVelocityUncertainty'] = {'InputName':'vErr', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-     fieldInfo['observedThicknessTendency'] = {'InputName':'dHdt', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
-     fieldInfo['observedThicknessTendencyUncertainty'] = {'InputName':'dHdtErr', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['thicknessUncertainty'] = {'InputName':'topgerr', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
 
      fieldInfo['ismip6shelfMelt_basin'] = {'InputName':'ismip6shelfMelt_basin', 'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
@@ -695,6 +693,8 @@ if filetype=='cism':
      fieldInfo['observedSurfaceVelocityYMeasures'] = {'InputName':'vy', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedSurfaceVelocityUncertaintyMeasures'] = {'InputName':'vErr', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['landSatMask'] =  {'InputName':'mask',  'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['observedThicknessTendency'] = {'InputName':'dHdt_mean', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['observedThicknessTendencyUncertainty'] = {'InputName':'dHdtErr', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
 
 # -----------------
 elif filetype=='mpas':
