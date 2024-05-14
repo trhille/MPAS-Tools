@@ -6,8 +6,7 @@ cd $mpas_tools
 git checkout crane_interpolation
 cd -
 
-echo $PWD
-cp /pscratch/sd/t/trhille/crane_mesh_20240404/landice/crane/mesh_gen/mesh/Crane.nc .
+cp ../landice/crane/mesh_gen/mesh/Crane.nc .
 
 # Do all edits on local copy of landsat velocity file
 cp /global/cfs/cdirs/fanssie/users/trhille/data/Crane/velocities_for_trevor/landsat_both/18dec2002_20feb2003/landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp.nc .
