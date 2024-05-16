@@ -52,6 +52,8 @@ parser.add_argument("-m", dest="mesh", default=None, metavar="FILENAME",
                           variables to limit file size. Define either one mesh file \
                           to be applied to all run files, or one mesh file per \
                           run file (list separated by commas; no spaces)")
+parser.add_argument("--plot_multiple_grounding_lines", dest="plot_multiple_grounding_lines",
+                  action="store_true", help="Plot multiple grounding lines on one axes")
 parser.add_argument("-s", dest="saveNames", default=None, metavar="FILENAME",
                     help="filename for saving. If empty or None, will plot \
                           to screen instead of saving.")
@@ -139,7 +141,7 @@ divColorMaps = ['PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu',
 def dist(i1, i2, xCell, yCell):  # helper distance fn
     dist = ((xCell[i1]-xCell[i2])**2 + (yCell[i1]-yCell[i2])**2)**0.5
     return dist
-
+    
 # Loop over runs
 # Each run gets its own figure
 # Each variable gets its own row
@@ -147,6 +149,13 @@ def dist(i1, i2, xCell, yCell):  # helper distance fn
 varPlot = {}
 figs = {}
 gs = {}
+
+# We currently only support one figure when plotting multiple grounding lines
+if args.plot_multiple_grounding_lines:
+    figs[0] = plt.figure()
+    nRows = len(variables)
+    nCols = 2
+
 for ii, run in enumerate(runs):
     if '.nc' not in run:
         run = run + '/output.nc'
@@ -190,24 +199,27 @@ for ii, run in enumerate(runs):
     triang.set_mask(triMask)
 
     # set up figure for this run
-    figs[run] = plt.figure()
-    figs[run].suptitle(run)
-    nRows = len(variables)
-    nCols = len(timeLevs) + 1
+    if not args.plot_multiple_grounding_lines:
+        figs[run] = plt.figure()
+        figs[run].suptitle(run)
+        nRows = len(variables)
+        nCols = len(timeLevs) + 1
 
-    # last column is for colorbars
-    gs[run] = gridspec.GridSpec(nRows, nCols,
-                           height_ratios=[1] * nRows,
-                           width_ratios=[1] * (nCols - 1) + [0.1])
-    axs = []
-    cbar_axs = []
-    for row in np.arange(0, nRows):
-        cbar_axs.append(plt.subplot(gs[run][row,-1]))
-        for col in np.arange(0, nCols-1):
-            if axs == []:
-                axs.append(plt.subplot(gs[run][row, col]))
-            else:
-                axs.append(plt.subplot(gs[run][row, col], sharex=axs[0], sharey=axs[0]))
+    if not args.plot_multiple_grounding_lines or \
+        (args.plot_multiple_grounding_lines and ii == 0):
+        # last column is for colorbars
+        gs[run] = gridspec.GridSpec(nRows, nCols,
+                               height_ratios=[1] * nRows,
+                               width_ratios=[1] * (nCols - 1) + [0.1])
+        axs = []
+        cbar_axs = []
+        for row in np.arange(0, nRows):
+            cbar_axs.append(plt.subplot(gs[run][row,-1]))
+            for col in np.arange(0, nCols-1):
+                if axs == []:
+                    axs.append(plt.subplot(gs[run][row, col]))
+                else:
+                    axs.append(plt.subplot(gs[run][row, col], sharex=axs[0], sharey=axs[0]))
 
     varPlot[run] = {}  # is a dict of dicts too complicated?
     cbars = []
@@ -299,17 +311,28 @@ for ii, run in enumerate(runs):
             # Plot 2D field at each desired time. Use quantile range of 0.01-0.99 to cut out
             # outliers. Could improve on this by accounting for areaCell, as currently all cells
             # are weighted equally in determining vmin and vmax.
-            varPlot[run][variable].append(
-                              axs[index].tripcolor(
-                                  triang, var_to_plot[timeLev, :], cmap=colormap,
-                                  shading='flat', norm=norm))
+            if (args.plot_multiple_grounding_lines and ii == 0) or \
+                not args.plot_multiple_grounding_lines:
+                varPlot[run][variable].append(
+                                  axs[index].tripcolor(
+                                      triang, var_to_plot[timeLev, :], cmap=colormap,
+                                      shading='flat', norm=norm))
             axs[index].set_aspect('equal')
             axs[index].set_title(f'year = {yr[timeLev]:0.2f}')
 
-        cbars.append(Colorbar(ax=cbar_ax, mappable=varPlot[run][variable][0], orientation='vertical',
-                 label=f'{colorbar_label_prefix}{variable} (${units}$)'))
+    if args.plot_multiple_grounding_lines:
+        cbars.append(Colorbar(
+            ax=cbar_ax, mappable=varPlot[runs[0]][variable][0],
+            orientation='vertical',
+            label=f'{colorbar_label_prefix}{variable} (${units}$)'))
+        figs[0].tight_layout()
+    else:
+        cbars.append(Colorbar(
+            ax=cbar_ax, mappable=varPlot[run][variable][0],
+            orientation='vertical',
+            label=f'{colorbar_label_prefix}{variable} (${units}$)'))
+        figs[run].tight_layout()
 
-    figs[run].tight_layout()
     if args.saveNames is not None:
         figs[run].savefig(saveNames[ii], dpi=400, bbox_inches='tight')
     
