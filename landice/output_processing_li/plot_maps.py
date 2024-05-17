@@ -18,6 +18,7 @@ import numpy as np
 from netCDF4 import Dataset
 import argparse
 import matplotlib.pyplot as plt
+from matplotlib.pyplot import cm
 import matplotlib.tri as tri
 import matplotlib.gridspec as gridspec
 from matplotlib.colorbar import Colorbar
@@ -138,6 +139,29 @@ groundingLineValue = 256
 divColorMaps = ['PiYG', 'PRGn', 'BrBG', 'PuOr', 'RdGy', 'RdBu', 'RdYlBu',
                       'RdYlGn', 'Spectral', 'coolwarm', 'bwr', 'seismic']
 
+# Colors for plotting multiple grounding lines
+plot_times = []
+for ii, run in enumerate(runs):
+    if '.nc' not in run:
+        run = run + '/output.nc'
+    f = Dataset(run, 'r')
+    f.set_auto_mask(False)
+    if 'daysSinceStart' in f.variables.keys():
+        yr = f.variables['daysSinceStart'][timeLevs] / 365.
+    else:
+        yr = [0.]
+    plot_times.append(yr)
+    f.close()
+
+plot_times = np.squeeze(plot_times)
+plot_times_norm = (plot_times - np.min(plot_times)) / np.max(plot_times - np.min(plot_times))
+n_times = len(plot_times)
+gl_cmap_name = "plasma"
+gl_cmap = plt.get_cmap(gl_cmap_name)
+time_colors = gl_cmap(plot_times_norm)
+if not args.plot_multiple_grounding_lines:
+    time_colors[:] = 1.
+
 def dist(i1, i2, xCell, yCell):  # helper distance fn
     dist = ((xCell[i1]-xCell[i2])**2 + (yCell[i1]-yCell[i2])**2)**0.5
     return dist
@@ -156,6 +180,7 @@ if args.plot_multiple_grounding_lines:
     nRows = len(variables)
     nCols = 2
 
+plot_time_count = 0
 for ii, run in enumerate(runs):
     if '.nc' not in run:
         run = run + '/output.nc'
@@ -302,12 +327,12 @@ for ii, run in enumerate(runs):
                                       levels=[0.9999], colors='grey',
                                       linestyles='solid')
                 axs[index].tricontour(triang, groundingLineMask[timeLev, :],
-                                      levels=[0.9999], colors='white',
+                                      levels=[0.9999], colors=time_colors[plot_time_count, None],
                                       linestyles='solid')
+                plot_time_count += 1
                 axs[index].tricontour(triang, initialExtentMask[timeLev, :],
                                       levels=[0.9999], colors='black',
                                       linestyles='solid')
-
             # Plot 2D field at each desired time. Use quantile range of 0.01-0.99 to cut out
             # outliers. Could improve on this by accounting for areaCell, as currently all cells
             # are weighted equally in determining vmin and vmax.
@@ -337,5 +362,11 @@ for ii, run in enumerate(runs):
         figs[run].savefig(saveNames[ii], dpi=400, bbox_inches='tight')
     
     f.close()
+
+if args.plot_multiple_grounding_lines:
+    time_cbar = plt.colorbar(cm.ScalarMappable(cmap=gl_cmap_name), ax=axs[0], location='bottom')
+    time_cbar.ax.tick_params(labelsize=12)
+    time_cbar.set_ticks(plot_times_norm)
+    time_cbar.set_ticklabels(str(i) for i in plot_times)
 
 plt.show()
