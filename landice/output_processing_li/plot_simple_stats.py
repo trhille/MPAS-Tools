@@ -266,7 +266,7 @@ def plot_stats(directory, file):
 
     # Hard-code some settings for ISMIP6 sensitivity tests.
     if args.sensitivity:
-        if 'gamma21000' in fname or 'm10' in fname or 'enthalpy' in fname:
+        if 'gamma21000' in fname or 'm10' in fname or 'enthalpy' in fname or '2km' in fname:
             linestyle = 'dashed'
         elif 'gamma9620' in fname or 'm1/' in fname or 'no_thermal' in fname:
             linestyle = 'dotted'
@@ -283,9 +283,9 @@ def plot_stats(directory, file):
         linewidth = 2
 
     if regional:
-        if 'AE02' in fname:
+        if 'AE02' in fname or 'AE11' in fname:
             axs = [axs1[1]]  # for list comprehension plotting, below
-        elif 'AE03' in fname:
+        elif 'AE03' in fname or 'AE12' in fname:
             axs = [axs1[2]]  # for list comprehension plotting, below
         elif 'hist' in fname or 'ctrlAE' in fname:
             if args.hist:
