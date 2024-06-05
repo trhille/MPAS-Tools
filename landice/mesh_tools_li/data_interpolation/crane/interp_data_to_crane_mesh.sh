@@ -6,6 +6,7 @@ cd $mpas_tools
 git checkout crane_interpolation
 cd -
 
+echo $PWD
 cp ../landice/crane/mesh_gen/mesh/Crane.nc .
 
 # Do all edits on local copy of landsat velocity file
@@ -70,6 +71,10 @@ gdalwarp -t_srs EPSG:3031 /global/cfs/cdirs/fanssie/users/trhille/data/Crane/APD
 gdal_translate -of netCDF APDEM100m_EPSG3031.tif APDEM100m_EPSG3031.nc
 
 ncks -O -d x,1000,2000 -d y,3800,5000 APDEM100m_EPSG3031.nc APDEM100m_EPSG3031_Crane.nc
+
+# Create the 2002 ice mask using a pre-defined geojson file. This could maybe be improved,
+# but using the gappy datasets to define the ice extent is also problematic.
+python create_ice_mask_from_geojson.py
 
 conda deactivate  # no longer need gdal
 
@@ -168,8 +173,7 @@ ncap2 -A -s "where(landSatMask>0.99999) {
               }" Crane.nc
 
 ncap2 -A -s "where(observedSurfaceVelocityUncertainty == 0.0) observedSurfaceVelocityUncertainty = 1.0" Crane.nc
-
-# To-do: 1) calculate thickness (including firn air content correction?); 2) trim ice extent to match landsat velocities; 3) Surface mass balance; 4) dH/dt :(
+ncap2 -A -s "where(sqrt((observedSurfaceVelocityX^2.0 + observedSurfaceVelocityY^2.0) == 0.0) observedSurfaceVelocityUncertainty = 1.0" Crane.nc
 # Get subset of ITS_LIVE dHdt data:
 ncks -O -d x,175,225 -d y,775,850 /global/cfs/cdirs/fanssie/users/trhille/data/ITS_LIVE_dHdt/ITS_LIVE_dHdt.nc ITS_LIVE_dHdt_Crane.nc
 # ITS_LIVE data are scaled, so we need to unpack:
@@ -215,7 +219,7 @@ python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/landice/mesh_tools_li/
 # Remap SMB, using 2002-2003 average to be consistent with surface, velocity, and dH/dt observations.
 # Testing shows that there is not a large difference compared with using the 1995-2017 average.
 # This is a hacky use of the COMPASS workflow, but I can't think of a better way to use the existing tools.
-source /global/cfs/cdirs/fanssie/users/trhille/compass/load_dev_compass_1.3.0-alpha.3_pm-cpu_gnu_mpich_albany.sh
+source /global/cfs/cdirs/fanssie/users/trhille/compass/load_dev_compass_1.4.0-alpha.2_pm-cpu_gnu_mpich_albany.sh
 mkdir process_RACMO
 sed -i -e "102s/17,39/23,24/g" \
     /global/cfs/cdirs/fanssie/users/trhille/compass/compass/landice/tests/ismip6_forcing/atmosphere/process_smb_racmo.py
@@ -237,5 +241,12 @@ ncap2 -A -s "float_mask = (surfaceBerthierAster < float_surface) * (bedTopograph
 ncap2 -A -s "thickness = float_mask * ( 1.0 / (1.0 - rhoi/rhosw) *
                  surfaceBerthierAster) + (1.0 - float_mask) *
                  (surfaceBerthierAster - bedTopography)" tmp.nc
-ncap2 -A -s "where(thickness < 0.0) thickness = 0.0" tmp.nc
 ncks -A -v thickness tmp.nc Crane.nc
+
+# Now trim ice extent to match edge of velocities dataset, which was manually defined with a geojson file.
+# This was calculated on the MALI mesh above.
+ncap2 -A -s "thickness = thickness * iceMask_2002" Crane.nc
+
+cp /global/cfs/cdirs/fanssie/users/trhille/data/Paolo_2023_melt_rates/ANT_G1920V01_IceShelfMelt.nc .
+python calculate_floating_basal_mass_bal.py 
+# To-do: 1) Correct thickness for firn air content?;
