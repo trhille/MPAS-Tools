@@ -224,6 +224,7 @@ python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/landice/mesh_tools_li/
 cd /global/cfs/cdirs/fanssie/users/trhille/compass/
 git checkout trhille/landice/crane_smb
 source /global/cfs/cdirs/fanssie/users/trhille/compass/load_dev_compass_1.4.0-alpha.2_pm-cpu_gnu_mpich_albany.sh
+cd -
 mkdir process_RACMO
 sed -i -e "s/17,39/21,26/g" \
     /global/cfs/cdirs/fanssie/users/trhille/compass/compass/landice/tests/ismip6_forcing/atmosphere/process_smb_racmo.py
