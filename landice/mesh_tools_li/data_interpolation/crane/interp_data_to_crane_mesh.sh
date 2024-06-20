@@ -199,6 +199,8 @@ ncap2 -A -s 'dHdtErr = dHdt.rmssdn($time)' ITS_LIVE_dHdt_Crane_Oct02_March03_mea
 ncatted -a standard_name,dHdtErr,o,c,"standard deviation of dHdt over averaging period" ITS_LIVE_dHdt_Crane_Oct02_March03_mean.nc
 ncatted -a units,dHdtErr,o,c,"m/yr" ITS_LIVE_dHdt_Crane_Oct02_March03_mean.nc
 ncap2 -A -s "x1 = x; y1 = y" ITS_LIVE_dHdt_Crane_Oct02_March03_mean.nc
+ncatted -a _FillValue,dHdt_mean,o,f,0.0 ITS_LIVE_dHdt_Crane_Oct02_March03_mean.nc
+ncatted -a _FillValue,dHdtErr,o,f,3.154e7 ITS_LIVE_dHdt_Crane_Oct02_March03_mean.nc
 
 # Interpolate dHdt to MALI mesh
 # TODO: How to treat missing data over lower glacier?
