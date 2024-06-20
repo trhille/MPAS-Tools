@@ -221,18 +221,20 @@ python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/landice/mesh_tools_li/
 # Remap SMB, using 2002-2003 average to be consistent with surface, velocity, and dH/dt observations.
 # Testing shows that there is not a large difference compared with using the 1995-2017 average.
 # This is a hacky use of the COMPASS workflow, but I can't think of a better way to use the existing tools.
+cd /global/cfs/cdirs/fanssie/users/trhille/compass/
+git checkout trhille/landice/crane_smb
 source /global/cfs/cdirs/fanssie/users/trhille/compass/load_dev_compass_1.4.0-alpha.2_pm-cpu_gnu_mpich_albany.sh
 mkdir process_RACMO
-sed -i -e "102s/17,39/23,24/g" \
+sed -i -e "s/17,39/21,26/g" \
     /global/cfs/cdirs/fanssie/users/trhille/compass/compass/landice/tests/ismip6_forcing/atmosphere/process_smb_racmo.py
-sed -i -e "s/1995-2017/2002-2003/g" \
+sed -i -e "s/1995.2017/2000-2005/g" \
     /global/cfs/cdirs/fanssie/users/trhille/compass/compass/landice/tests/ismip6_forcing/atmosphere/process_smb_racmo.py
 compass setup -t landice/ismip6_forcing/atmosphere -w process_RACMO -f ismip6_forcing.cfg
 cd process_RACMO/landice/ismip6_forcing/atmosphere/process_smb_racmo/
 compass run
 cd -
-ncks -A -v sfcMassBal \
-    process_RACMO/landice/ismip6_forcing/atmosphere/process_smb_racmo/Crane_RACMO2.3p2_ANT27_smb_climatology_2002-2003.nc \
+ncks -A -v sfcMassBal,sfcMassBalUncertainty \
+    process_RACMO/landice/ismip6_forcing/atmosphere/process_smb_racmo/Crane_RACMO2.3p2_ANT27_smb_climatology_2000-2005.nc \
     Crane.nc
 
 # Calculate ice thickness from surface and bed topography
