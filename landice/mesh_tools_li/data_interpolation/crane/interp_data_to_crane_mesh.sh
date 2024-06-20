@@ -252,5 +252,16 @@ ncks -A -v thickness tmp.nc Crane.nc
 ncap2 -A -s "thickness = thickness * iceMask_2002" Crane.nc
 
 cp /global/cfs/cdirs/fanssie/users/trhille/data/Paolo_2023_melt_rates/ANT_G1920V01_IceShelfMelt.nc .
-python calculate_floating_basal_mass_bal.py 
-# To-do: 1) Correct thickness for firn air content?;
+python calculate_floating_basal_mass_bal.py
+
+# What we called thicknessUncertainty is really uncertainty in bed topography
+ncrename -v thicknessUncertainty,bedTopographyUncertainty Crane.nc
+
+# Assign a uniform surface elevation uncertainty of 39 m. This accounts for
+# 24 m RMSE in the ASTER DEM, a ~15 m uncertainty in firn air content (see
+# discussion in Needell and Holschuh, 2023).
+ncap2 -A -s "surfaceElevationUncertainty = (thickness > 1.0) * 39.0" Crane.nc
+
+# Get Martos et al (2017) heat flux data: https://doi.pangaea.de/10.1594/PANGAEA.882503?format=html#download
+wget https://store.pangaea.de/Publications/Martos-etal_2017/Antarctic_GHF.xyz
+python interpolate_geothermal_heat_flux.py
