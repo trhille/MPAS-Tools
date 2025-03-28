@@ -9,6 +9,7 @@ Trevor Hillebrand 11/2023
 import sys
 import os
 import re
+import string
 import numpy as np
 from netCDF4 import Dataset
 from argparse import ArgumentParser
@@ -85,8 +86,8 @@ for directory in in_directories:
 ISMIP6basinInfo = {
         'ISMIP6BasinAAp': {'name': 'Dronning Maud Land', 'color': 'tab:blue', 'input': [60,9], 'outflow': [60,7], 'net': [0, 11], 'shelfMelt': [57.5]},
         'ISMIP6BasinApB': {'name': 'Enderby Land', 'color': 'tab:orange', 'input': [39,5], 'outflow': [40,2], 'net': [-1,5], 'shelfMelt': [24.6]},
-        'ISMIP6BasinBC': {'name': 'Amery-Lambert', 'color': 'tab:red', 'input': [73, 10], 'outflow': [77,4], 'net': [-4, 11], 'shelfMelt': [35.5]},
-        'ISMIP6BasinCCp': {'name': 'Phillipi, Denman', 'color': 'tab:brown', 'input': [81, 13], 'outflow': [87,7], 'net':[-7,15], 'shelfMelt': [107.9]},
+        'ISMIP6BasinBC': {'name': 'Amery-Lambert', 'color': 'tab:brown', 'input': [73, 10], 'outflow': [77,4], 'net': [-4, 11], 'shelfMelt': [35.5]},
+        'ISMIP6BasinCCp': {'name': 'Phillipi, Denman', 'color': 'tab:red', 'input': [81, 13], 'outflow': [87,7], 'net':[-7,15], 'shelfMelt': [107.9]},
         'ISMIP6BasinCpD': {'name': 'Totten', 'color': 'tab:pink', 'input': [198,37], 'outflow': [207,13], 'net': [-8,39], 'shelfMelt': [102.3]},
         'ISMIP6BasinDDp': {'name': 'Mertz', 'color': 'tab:gray', 'input': [93,14], 'outflow': [94,6], 'net': [-2,16], 'shelfMelt': [22.8]},
         'ISMIP6BasinDpE': {'name': 'Victoria Land', 'color': 'tab:olive', 'input': [20,1], 'outflow': [22,3], 'net': [-2,4], 'shelfMelt': [22.9]},
@@ -137,22 +138,22 @@ if args.regional:
 # and alpha (opacity) corresponds to Forcing (opaque for 2300, semi-transparent for Repeat).
 # Hydrofracture runs will all have their own panel, so no need for special plot settings for those.
 global_plot_settings = {
-        'hist': {'color': 'black', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-        'ctrlAE': {'color': 'black', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-        'expAE01': {'color': 'tab:gray', 'linestyle': 'dashed', 'alpha': 0.6, 'tier': '1'},
-        'expAE02': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-        'expAE03': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-        'expAE04': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-        'expAE05': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1., 'tier': '1'},
-        'expAE06': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '1'},
-        'expAE07': {'color': 'tab:gray', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
-        'expAE08': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
-        'expAE09': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a'},
-        'expAE10': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1, 'tier': '2a'},
-        'expAE11': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'},
-        'expAE12': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'},
-        'expAE13': {'color': 'tab:purple', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'},
-        'expAE14': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b'}
+        'hist': {'color': 'black', 'linestyle': 'solid', 'alpha': 1., 'tier': '1', 'esm': None},
+        'ctrlAE': {'color': 'black', 'linestyle': 'solid', 'alpha': 1., 'tier': '1', 'esm': "control"},
+        'expAE01': {'color': 'tab:gray', 'linestyle': 'dashed', 'alpha': 0.6, 'tier': '1', 'esm': "NorESM1-M-RCP2.6-repeat"},
+        'expAE02': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1., 'tier': '1', 'esm': "CCSM4-RCP8.5-2300"},
+        'expAE03': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1., 'tier': '1', 'esm': "HadGEM2-RCP8.5-2300"},
+        'expAE04': {'color': 'tab:red', 'linestyle': 'solid', 'alpha': 1., 'tier': '1', 'esm': "CESM2-ssp5-85-2300"},
+        'expAE05': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1., 'tier': '1', 'esm': "UKESM-ssp5-85-2300"},
+        'expAE06': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '1', 'esm': "UKESM-ssp5-85-repeat"},
+        'expAE07': {'color': 'tab:gray', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a', 'esm': "NorESM1-M-RCP8.5-repeat"},
+        'expAE08': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a', 'esm': "HadGEM2-RCP8.5-repeat"},
+        'expAE09': {'color': 'tab:red', 'linestyle': 'solid', 'alpha': 0.6, 'tier': '2a', 'esm': "CESM2-ssp5-85-repeat"},
+        'expAE10': {'color': 'tab:pink', 'linestyle': 'dashed', 'alpha': 1, 'tier': '2a', 'esm': "UKESM-ssp1-26-2300"},
+        'expAE11': {'color': 'tab:blue', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b', 'esm': "CCSM4-RCP8.5-2300-h"},
+        'expAE12': {'color': 'tab:orange', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b', 'esm': "HadGEM2-RCP8.5-2300-h"},
+        'expAE13': {'color': 'tab:red', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b', 'esm': "CESM2-ssp5-85-2300-h"},
+        'expAE14': {'color': 'tab:pink', 'linestyle': 'solid', 'alpha': 1., 'tier': '2b', 'esm': "UKESM-ssp5-85-h"}
         }
 # Determine plot settings for each run based on the above dict.
 for run_item in run_dict:
@@ -162,6 +163,7 @@ for run_item in run_dict:
             run_dict[run_item]['linestyle'] = global_plot_settings[scen_item]['linestyle']
             run_dict[run_item]['alpha'] = global_plot_settings[scen_item]['alpha']
             run_dict[run_item]['tier'] = global_plot_settings[scen_item]['tier']
+            run_dict[run_item]['label'] = global_plot_settings[scen_item]['esm']
 
 if args.sensitivity and not args.regional:
     ncol = 1
@@ -198,10 +200,12 @@ for ind, share in zip(range(1, ncol * nrow + 1), sharey):
         share_ax = None
     axs1.append(fig1.add_subplot(nrow, ncol, ind, sharey=share_ax))
 
-for ax in axs1:
+alphabet = list(string.ascii_lowercase)  # For plot labels
+for ii, ax in enumerate(axs1):
     ax.grid()
     ax.set_xlabel('Year', fontsize=13)
     ax.tick_params(axis='both', which='major', labelsize=12)
+    ax.text(0.01, 1.01, f'({alphabet[ii]})', transform=ax.transAxes, fontsize=12)
 
 # Set up unit conversion factors to be used when reading variables
 if args.units == "m3":
@@ -352,14 +356,19 @@ def plot_stats(directory, file):
     else:
         if args.sensitivity:
             lstyle = linestyle
+            label = None
         else:
             lstyle = run_dict[directory]['linestyle']
+            label = run_dict[directory]['label']
 
         if args.regional and not regional:
             axs = [axs1[0]]
         [ax.plot(args.start_year + yr, plot_var, color=run_dict[directory]['color'],
                  linestyle=lstyle,
-                 alpha=run_dict[directory]['alpha'], linewidth=linewidth) for ax in axs]
+                 alpha=run_dict[directory]['alpha'],
+                 linewidth=linewidth,
+                 label=label) for ax in axs]
+#        [ax.legend(fontsize='small') for ax in axs]
         if args.plot_obs:
             mnTot=0.0
             sigTot = 0.0
@@ -386,6 +395,8 @@ if "olumeAboveFloatation" in args.plot_var:
     for ax in axs1:
         sea_lev_ax = add_sea_lev_ax(ax)
     sea_lev_ax.set_ylabel('Sea-level\nequivalent (mm)')
+
+[ax.legend(fontsize='small') for ax in axs1]
 
 print("Generating plot.")
 fig1.tight_layout()
