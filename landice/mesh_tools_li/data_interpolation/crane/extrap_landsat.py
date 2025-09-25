@@ -24,9 +24,9 @@ vx = data.variables["vx_masked"][:].data.ravel()
 vx_mask = np.logical_not(data.variables["vx_masked"][:].mask.ravel())
 vy = data.variables["vy_masked"][:].data.ravel()
 vy_mask = np.logical_not(data.variables["vy_masked"][:].mask.ravel())
-# Mask needs an extra speed threshold of 20 m/day
-spd_thresh = 10.  # m/day
-mask  = np.logical_and(np.logical_and(vx_mask, vy_mask), np.sqrt(vx**2. + vy**2.) < spd_thresh)
+# Mask needs an extra speed threshold of ~1500 m/yr to remove spurious fast cells.
+spd_thresh = 4.  # m/day
+mask = np.logical_and(np.logical_and(vx_mask, vy_mask), np.sqrt(vx**2. + vy**2.) < spd_thresh)
 
 x1 = data.variables["x1"][:]
 y1 = data.variables["y1"][:]

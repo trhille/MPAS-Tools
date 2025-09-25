@@ -693,6 +693,7 @@ if filetype=='cism':
      fieldInfo['observedSurfaceVelocityYMeasures'] = {'InputName':'vy', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedSurfaceVelocityUncertaintyMeasures'] = {'InputName':'vErr', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['landSatMask'] =  {'InputName':'mask',  'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}
+     fieldInfo['measuresMask'] =  {'InputName':'measures_mask',  'scalefactor':1.0, 'offset':0.0, 'gridType':'x1', 'vertDim':False}     
      fieldInfo['observedThicknessTendency'] = {'InputName':'dHdt_mean', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
      fieldInfo['observedThicknessTendencyUncertainty'] = {'InputName':'dHdtErr', 'scalefactor':1.0/(365.0*24.0*3600.0), 'offset':0.0, 'gridType':'x1', 'vertDim':False}
 

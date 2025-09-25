@@ -83,7 +83,7 @@ while len(lastSearchList) > 0:
 
 
 # apply flood fill
-sfc[floodMask==0] = 0.0
+sfc[floodMask==0] = np.nan
 print("Flood fill complete")
     #   # make masks -------------------
 neighbors=np.array([[1,0], [-1,0], [0,1], [0,-1], [1,1], [-1,1], [1,-1], [-1,-1]])

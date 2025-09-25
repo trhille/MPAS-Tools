@@ -7,12 +7,13 @@ git checkout crane_interpolation
 cd -
 
 echo $PWD
-cp ../landice/crane/mesh_gen/mesh/Crane.nc .
+cp /pscratch/sd/t/trhille/crane_mesh_20250925/landice/crane/mesh_gen/mesh/Crane.nc Crane.nc
 
 # Do all edits on local copy of landsat velocity file
-cp /global/cfs/cdirs/fanssie/users/trhille/data/Crane/velocities_for_trevor/landsat_both/18dec2002_20feb2003/landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp.nc .
+cp /global/cfs/cdirs/m4288/users/trhille/data/Crane/velocities_for_trevor/landsat_both/18dec2002_20feb2003/landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp.nc .
 
-ncap2 -A -s "x1 = x; y1 = y" landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp.nc
+# remove spuriously high velocities from the landsat data
+ncap2 -A -s "x1 = x; y1 = y;" landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp.nc
 
 python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/mesh_tools/create_SCRIP_files/create_SCRIP_file_from_MPAS_mesh.py \
     -m Crane.nc -s Crane_scrip.nc
@@ -26,47 +27,52 @@ ESMF_RegridWeightGen --source landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_
     -d Crane_scrip.nc --weight landsat_to_MPAS_weights.nc --method conserve --netcdf4 \
     --dst_regional --src_regional --ignore_unmapped
 
+
 ncap2 -A -s "observedSurfaceVelocityXLandSat = observedSurfaceVelocityX * 0.0;
              observedSurfaceVelocityYLandSat = observedSurfaceVelocityY * 0.0;
              landSatMask = observedSurfaceVelocityX * 0.0" Crane.nc
 
 python extrap_landsat.py
 
+# Use conservative remapping because Landsat resolution is 30 m.
 python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/landice/mesh_tools_li/interpolate_to_mpasli_grid.py \
-    -s landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp.nc_extrap -d Crane.nc -m e -w landsat_to_MPAS_weights.nc \
+   -s landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp.nc_extrap -d Crane.nc -m e -w landsat_to_MPAS_weights.nc \
     -v observedSurfaceVelocityXLandSat observedSurfaceVelocityYLandSat landSatMask
 
 # Cut out a subdomain around Crane for fast interpolation
 ncks -O -d x,1750,1950 -d y,4045,4280 \
-    /global/cfs/cdirs/fanssie/users/trhille/data/BedMachineAntarctica-v3.5/BedMachineAntarctica-v3.5_edits_floodFill_extrap.nc \
-    BedMachineAntarctica-v3.5_edits_floodFill_extrap_Crane.nc
+    /global/cfs/cdirs/m4288/users/trhille/data/BedMachineAntarctica-v3/BedMachineAntarctica-v3.nc \
+    BedMachineAntarctica-v3_Crane.nc
 
 python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools//mesh_tools/create_SCRIP_files/create_SCRIP_file_from_planar_rectangular_grid.py \
-    -i BedMachineAntarctica-v3.5_edits_floodFill_extrap_Crane.nc \
-    -s BedMachineAntarctica-v3.5_edits_floodFill_extrap_Crane_scrip.nc -p ais-bedmap2 -r 2
+    -i BedMachineAntarctica-v3_Crane.nc \
+    -s BedMachineAntarctica-v3_Crane_scrip.nc -p ais-bedmap2 -r 2
 
-ESMF_RegridWeightGen --source BedMachineAntarctica-v3.5_edits_floodFill_extrap_Crane_scrip.nc \
+ESMF_RegridWeightGen --source BedMachineAntarctica-v3_Crane_scrip.nc \
     -d Crane_scrip.nc --weight BedMachine_to_MPAS_weights.nc --method conserve \
     --netcdf4 --dst_regional --src_regional --ignore_unmapped
 
 ncap2 -A -s "surfaceBedMachine = bedTopography * 0.0" Crane.nc
 
 python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/landice/mesh_tools_li/interpolate_to_mpasli_grid.py \
-    -s BedMachineAntarctica-v3.5_edits_floodFill_extrap_Crane.nc -d Crane.nc -m e -w BedMachine_to_MPAS_weights.nc
+    -s BedMachineAntarctica-v3_Crane.nc -d Crane.nc -m e -w BedMachine_to_MPAS_weights.nc \
+    -v iceMask surfaceBedMachine
 
 ncap2 -A -s "where(iceMask < 0.5) thickness = 0.0" Crane.nc
 
-# Reproject Berthier DEM to EPSG 3031
-# TODO: Berthier DEM uses elevation wrt EGM96 geoid, while bedmachine uses EIGEN-6C4
 conda activate gdal
 
-gdalwarp -t_srs EPSG:3031 /global/cfs/cdirs/fanssie/users/trhille/data/Crane/Berthier_DEMs/DEM_2002.85300894_shifted_H_V.tif \
+# Merge bed dems
+python merge_Rebesco_Huss-Farinetti_BedMachine_DEMs_extended_domain.py
+
+# Reproject Berthier DEM to EPSG 3031
+gdalwarp -t_srs EPSG:3031 /global/cfs/cdirs/m4288/users/trhille/data/Crane/Berthier_DEMs/DEM_2002.85300894_shifted_H_V.tif \
     DEM_2002.85300894_shifted_H_V_EPSG3031.tif
 
 gdal_translate -of netCDF DEM_2002.85300894_shifted_H_V_EPSG3031.tif DEM_2002.85300894_shifted_H_V_EPSG3031.nc
 
 # Trim and reproject ASTER DEM to EPSG 3031
-gdalwarp -t_srs EPSG:3031 /global/cfs/cdirs/fanssie/users/trhille/data/Crane/APDEM100m.tif APDEM100m_EPSG3031.tif
+gdalwarp -t_srs EPSG:3031 /global/cfs/cdirs/m4288/users/trhille/data/Crane/APDEM100m.tif APDEM100m_EPSG3031.tif
 
 gdal_translate -of netCDF APDEM100m_EPSG3031.tif APDEM100m_EPSG3031.nc
 
@@ -87,17 +93,16 @@ python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools//mesh_tools/create_SCR
     -i APDEM100m_EPSG3031_Crane.nc \
     -s APDEM100m_EPSG3031_Crane.scrip.nc -p ais-bedmap2 -r 2
 
-ESMF_RegridWeightGen --source DEM_2002.85300894_shifted_H_V_EPSG3031_scrip.nc \
-    -d APDEM100m_EPSG3031_Crane.scrip.nc --weight Berthier_to_ASTER_weights.nc \
-    --method conserve --netcdf4 --dst_regional --src_regional --ignore_unmapped
-
 ncrename -v Band1,surfaceBerthier DEM_2002.85300894_shifted_H_V_EPSG3031.nc
 ncrename -v Band1,surfaceAster APDEM100m_EPSG3031_Crane.nc
-
 # Flood-fill Berthier DEM to remove noise and icebergs? In theory
 # it seems like a good idea, but it ends up with a really bad surface
 # on the MALI mesh.
-# python dem_flood_fill.py
+python dem_flood_fill.py
+
+ESMF_RegridWeightGen --source DEM_2002.85300894_shifted_H_V_EPSG3031_scrip.nc \
+    -d APDEM100m_EPSG3031_Crane.scrip.nc --weight Berthier_to_ASTER_weights.nc \
+    --method conserve --netcdf4 --dst_regional --src_regional --ignore_unmapped
 
 # Now remap Berthier onto ASTER mesh (finer onto coarser) before
 # combining and interpolating to MALI mesh.
@@ -127,20 +132,45 @@ python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/landice/mesh_tools_li/
 # We assume an upper bound of the 2007-2009 velocity + std and a lower bound of the 1995-2001
 # velocity - std. The resulting "observed" velocity is the cell-wise average of these, and the
 # "uncertainty" is half the spread.
-cp /global/cfs/cdirs/piscees/trhille/AIS_datasets/NSIDC_0761_measures_velocities/antarctica_ice_velocity_1995-2001_450m_v01.0_Crane.nc .
-ncrename -v VX,VX2001 -v VY,VY2001 -v STDX,STDX2001 -v STDY,STDY2001 -v x,x1 -v y,y1 antarctica_ice_velocity_1995-2001_450m_v01.0_Crane.nc
-ncks -A -v VX2001,VY2001,STDX2001,STDY2001,x1,y1 antarctica_ice_velocity_1995-2001_450m_v01.0_Crane.nc measures_upstream_velocities.nc
+ncks -O -d y,3260,3560 -d x,800,1000 \
+   /global/cfs/cdirs/m4288/users/trhille/data/MEaSUREs/NSIDC-0761_multiyear/antarctica_ice_velocity_1995-2001_450m_v01.0.nc \
+   antarctica_ice_velocity_1995-2001_450m_v01.0_Crane.nc
 
-cp /global/cfs/cdirs/piscees/trhille/AIS_datasets/NSIDC_0761_measures_velocities/antarctica_ice_velocity_2007-2009_450m_v01.0_Crane.nc .
-ncrename -v VX,VX2009 -v VY,VY2009 -v STDX,STDX2009 -v STDY,STDY2009 -v x,x1 -v y,y1 antarctica_ice_velocity_2007-2009_450m_v01.0_Crane.nc
-ncks -A -v VX2009,VY2009,STDX2009,STDY2009 antarctica_ice_velocity_2007-2009_450m_v01.0_Crane.nc measures_upstream_velocities.nc
+ncks -O -d y,3260,3560 -d x,800,1000 \
+   /global/cfs/cdirs/m4288/users/trhille/data/MEaSUREs/NSIDC-0761_multiyear/antarctica_ice_velocity_2007-2009_450m_v01.0.nc \
+   antarctica_ice_velocity_2007-2009_450m_v01.0_Crane.nc
+
+python extrap_fields.py \
+   -i antarctica_ice_velocity_1995-2001_450m_v01.0_Crane.nc \
+   -o antarctica_ice_velocity_1995-2001_450m_v01.0_Crane_extrap.nc \
+   -v VX VY ERRX ERRY STDX STDY
+
+python extrap_fields.py \
+   -i antarctica_ice_velocity_2007-2009_450m_v01.0_Crane.nc \
+   -o antarctica_ice_velocity_2007-2009_450m_v01.0_Crane_extrap.nc \
+   -v VX VY ERRX ERRY STDX STDY
+
+ncrename -v VX,VX2001 -v VY,VY2001 -v STDX,STDX2001 -v STDY,STDY2001 -v CNT,CNT2001 \
+         antarctica_ice_velocity_1995-2001_450m_v01.0_Crane_extrap.nc
+ncap2 -A -s "x1=x; y1=y" antarctica_ice_velocity_1995-2001_450m_v01.0_Crane_extrap.nc
+ncks -A -v VX2001,VY2001,STDX2001,STDY2001,CNT2001,x,y,x1,y1 \
+   antarctica_ice_velocity_1995-2001_450m_v01.0_Crane_extrap.nc \
+   measures_upstream_velocities.nc
+
+ncrename -v VX,VX2009 -v VY,VY2009 -v STDX,STDX2009 -v STDY,STDY2009 -v CNT,CNT2009 \
+         antarctica_ice_velocity_2007-2009_450m_v01.0_Crane_extrap.nc
+ncap2 -A -s "x1=x; y1=y" antarctica_ice_velocity_2007-2009_450m_v01.0_Crane_extrap.nc
+ncks -A -v VX2009,VY2009,STDX2009,STDY2009,CNT2009 \
+    antarctica_ice_velocity_2007-2009_450m_v01.0_Crane_extrap.nc \
+    measures_upstream_velocities.nc
 
 ncap2 -A -s "lower_vel_bound_x = VX2001 - STDX2001; lower_vel_bound_y = VY2001 - STDY2001;
              upper_vel_bound_x = VX2009 + STDX2009; upper_vel_bound_y = VY2009 + STDY2009;
+             measures_mask = (CNT2001>0 && CNT2009>0);
              vx = (VX2001 + VX2009) / 2.0;
              vy = (VY2001 + VY2009) / 2.0;
              vErr = (sqrt(upper_vel_bound_x^2.0 + upper_vel_bound_y^2.0) -
-                     sqrt(lower_vel_bound_x^2.0 + lower_vel_bound_y^2.0)).abs() / 2.0" \
+                     sqrt(lower_vel_bound_x^2.0 + lower_vel_bound_y^2.0)).abs() / 2.0;" \
              measures_upstream_velocities.nc
 
 python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/mesh_tools/create_SCRIP_files/create_SCRIP_file_from_planar_rectangular_grid.py \
@@ -148,34 +178,61 @@ python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/mesh_tools/create_SCRI
     -s measures_upstream_velocities.scrip.nc \
     -p ais-bedmap2 -r 2
 
-ESMF_RegridWeightGen --source measures_upstream_velocities.scrip.nc \
-    -d Crane_scrip.nc --weight measures_to_MPAS_weights.nc --method conserve --netcdf4 \
-    --dst_regional --src_regional --ignore_unmapped
-
 ncap2 -A -s "observedSurfaceVelocityXMeasures = observedSurfaceVelocityX * 0.0;
              observedSurfaceVelocityYMeasures = observedSurfaceVelocityY * 0.0;
-             observedSurfaceVelocityUncertaintyMeasures = observedSurfaceVelocityUncertainty * 0.0" Crane.nc
+             observedSurfaceVelocityUncertaintyMeasures = observedSurfaceVelocityUncertainty * 0.0;
+             measuresMask = iceMask * 0.0" Crane.nc
 
+# Use bilinear instead of conservative here because Measures resolution is 450 m
 python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/landice/mesh_tools_li/interpolate_to_mpasli_grid.py \
     -s measures_upstream_velocities.nc \
-    -d Crane.nc -m e -w measures_to_MPAS_weights.nc -v observedSurfaceVelocityXMeasures observedSurfaceVelocityYMeasures observedSurfaceVelocityUncertaintyMeasures
+    -d Crane.nc -m b -w measures_to_MPAS_weights.nc \
+    -v observedSurfaceVelocityXMeasures observedSurfaceVelocityYMeasures \
+       observedSurfaceVelocityUncertaintyMeasures measuresMask
 
 # Where LandSat velocities are good, use those (and assume 20% uncertainty).
 # Everywhere else, use MEaSUREs data.
-ncap2 -A -s "where(landSatMask>0.99999) {
-                 observedSurfaceVelocityX = observedSurfaceVelocityXLandSat;
-                 observedSurfaceVelocityY = observedSurfaceVelocityYLandSat;
-                 observedSurfaceVelocityUncertainty = 0.2 * sqrt(observedSurfaceVelocityXLandSat^2.0 + observedSurfaceVelocityYLandSat^2.0);
-              } elsewhere{
-                 observedSurfaceVelocityX = observedSurfaceVelocityXMeasures;
-                 observedSurfaceVelocityY = observedSurfaceVelocityYMeasures;
-                 observedSurfaceVelocityUncertainty = observedSurfaceVelocityUncertaintyMeasures;
-              }" Crane.nc
+
+ncap2 -A -s "observedSurfaceVelocityX(:,:) = 0.0;
+             observedSurfaceVelocityY(:,:) = 0.0;
+             observedSurfaceVelocityUncertainty(:,:) = 0.0;
+             where(landSatMask>0.99999 &&
+                   measuresMask>0.9999 &&
+                   (sqrt(observedSurfaceVelocityXLandSat^2.0 + observedSurfaceVelocityYLandSat^2.0) >
+                      sqrt(observedSurfaceVelocityXMeasures^2.0 + observedSurfaceVelocityYMeasures^2.0))) {
+                observedSurfaceVelocityX = observedSurfaceVelocityXLandSat;
+                observedSurfaceVelocityY = observedSurfaceVelocityYLandSat;
+                observedSurfaceVelocityUncertainty = 0.2 * sqrt(observedSurfaceVelocityXLandSat^2.0 + observedSurfaceVelocityYLandSat^2.0);
+             };
+             where(landSatMask>0.99999 &&
+                   measuresMask<0.9999) {
+                observedSurfaceVelocityX = observedSurfaceVelocityXLandSat;
+                observedSurfaceVelocityY = observedSurfaceVelocityYLandSat;
+                observedSurfaceVelocityUncertainty = 0.2 * sqrt(observedSurfaceVelocityXLandSat^2.0 + observedSurfaceVelocityYLandSat^2.0);
+             };
+             where(measuresMask>0.99999 &&
+                   landSatMask>0.99999 &&
+                   (sqrt(observedSurfaceVelocityXLandSat^2.0 + observedSurfaceVelocityYLandSat^2.0) < 
+                      sqrt(observedSurfaceVelocityXMeasures^2.0 + observedSurfaceVelocityYMeasures^2.0))) {
+                observedSurfaceVelocityX = observedSurfaceVelocityXMeasures;
+                observedSurfaceVelocityY = observedSurfaceVelocityYMeasures;
+                observedSurfaceVelocityUncertainty = observedSurfaceVelocityUncertaintyMeasures;
+             };
+             where(measuresMask>0.99999 &&
+                   landSatMask<0.99999) {
+                observedSurfaceVelocityX = observedSurfaceVelocityXMeasures;
+                observedSurfaceVelocityY = observedSurfaceVelocityYMeasures;
+                observedSurfaceVelocityUncertainty = observedSurfaceVelocityUncertaintyMeasures;
+             }" Crane.nc
 
 ncap2 -A -s "where(observedSurfaceVelocityUncertainty == 0.0) observedSurfaceVelocityUncertainty = 1.0" Crane.nc
-ncap2 -A -s "where(sqrt((observedSurfaceVelocityX^2.0 + observedSurfaceVelocityY^2.0) == 0.0) observedSurfaceVelocityUncertainty = 1.0" Crane.nc
+ncap2 -A -s "where(sqrt(observedSurfaceVelocityX^2.0 + observedSurfaceVelocityY^2.0) == 0.0) observedSurfaceVelocityUncertainty = 1.0" Crane.nc
+# We want the domain boundaries to have zero velocity to avoid inconsistencies in forward runs.
+# Uncertainty needs to be >0 for Albany loss, so set it to a minimum of 1mm/yr = 3.17m/s
+ncap2 -A -s 'where(dirichletVelocityMask(0,:,0)==1) {observedSurfaceVelocityX=0.0; observedSurfaceVelocityY=0.0; observedSurfaceVelocityUncertainty=3.17e-11;}' Crane.nc
+ncap2 -A -s "where(observedSurfaceVelocityUncertainty<3.17e-11) observedSurfaceVelocityUncertainty=3.17e-11" Crane.nc
 # Get subset of ITS_LIVE dHdt data:
-ncks -O -d x,175,225 -d y,775,850 /global/cfs/cdirs/fanssie/users/trhille/data/ITS_LIVE_dHdt/ITS_LIVE_dHdt.nc ITS_LIVE_dHdt_Crane.nc
+ncks -O -d x,175,225 -d y,775,850 /global/cfs/cdirs/m4288/users/trhille/data/ITS_LIVE_dHdt/grounded/ITS_LIVE_dHdt.nc ITS_LIVE_dHdt_Crane.nc
 # ITS_LIVE data are scaled, so we need to unpack:
 ncap2 -A -s "dh_unpacked = float(dh) * dh@scale_factor"  ITS_LIVE_dHdt_Crane.nc
 # Berthier DEM is from Nov 2002, velocities are from Dec 2002 to Feb 2003, so let's use dH/dt from Oct 2002 to March 2003.
@@ -218,25 +275,37 @@ python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/landice/mesh_tools_li/
     -d Crane.nc -m e -w ITS_LIVE_to_MPAS_weights.nc \
     -v observedThicknessTendency observedThicknessTendencyUncertainty
 
+# NOT NEEDED FOR VELOCITY-CONSTRAINED INVERSION
 # Remap SMB, using 2002-2003 average to be consistent with surface, velocity, and dH/dt observations.
 # Testing shows that there is not a large difference compared with using the 1995-2017 average.
 # This is a hacky use of the COMPASS workflow, but I can't think of a better way to use the existing tools.
-cd /global/cfs/cdirs/fanssie/users/trhille/compass/
-git checkout trhille/landice/crane_smb
-source /global/cfs/cdirs/fanssie/users/trhille/compass/load_dev_compass_1.4.0-alpha.2_pm-cpu_gnu_mpich_albany.sh
-cd -
-mkdir process_RACMO
-sed -i -e "s/17,39/21,26/g" \
-    /global/cfs/cdirs/fanssie/users/trhille/compass/compass/landice/tests/ismip6_forcing/atmosphere/process_smb_racmo.py
-sed -i -e "s/1995.2017/2000-2005/g" \
-    /global/cfs/cdirs/fanssie/users/trhille/compass/compass/landice/tests/ismip6_forcing/atmosphere/process_smb_racmo.py
-compass setup -t landice/ismip6_forcing/atmosphere -w process_RACMO -f ismip6_forcing.cfg
-cd process_RACMO/landice/ismip6_forcing/atmosphere/process_smb_racmo/
-compass run
-cd -
-ncks -A -v sfcMassBal,sfcMassBalUncertainty \
-    process_RACMO/landice/ismip6_forcing/atmosphere/process_smb_racmo/Crane_RACMO2.3p2_ANT27_smb_climatology_2000-2005.nc \
-    Crane.nc
+#cd /global/cfs/cdirs/fanssie/users/trhille/compass/
+#git checkout trhille/landice/crane_smb
+#source /global/cfs/cdirs/fanssie/users/trhille/compass/load_dev_compass_1.4.0-alpha.2_pm-cpu_gnu_mpich_albany.sh
+#mkdir process_RACMO
+#sed -i -e "s/17,39/21,26/g" \
+#    /global/cfs/cdirs/fanssie/users/trhille/compass/compass/landice/tests/ismip6_forcing/atmosphere/process_smb_racmo.py
+#sed -i -e "s/1995.2017/2000-2005/g" \
+#    /global/cfs/cdirs/fanssie/users/trhille/compass/compass/landice/tests/ismip6_forcing/atmosphere/process_smb_racmo.py
+#compass setup -t landice/ismip6_forcing/atmosphere -w process_RACMO -f ismip6_forcing.cfg
+#cd process_RACMO/landice/ismip6_forcing/atmosphere/process_smb_racmo/
+#compass run
+#cd -
+#ncks -A -v sfcMassBal,sfcMassBalUncertainty \
+#    process_RACMO/landice/ismip6_forcing/atmosphere/process_smb_racmo/Crane_RACMO2.3p2_ANT27_smb_climatology_2000-2005.nc \
+#    Crane.nc
+
+# interpolate merged Rebesco + Huss & Farinotti bed topography
+python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/mesh_tools/create_SCRIP_files/create_SCRIP_file_from_planar_rectangular_grid.py \
+   -i  /global/cfs/cdirs/fanssie/users/trhille/HiDEM_inputs/Crane/Rebesco_HF14_BedMachinev3_merged_buffered_feathering_N20_extended_small.nc \
+   -s  Rebesco_HF14_BedMachinev3_merged_buffered_feathering_N20_extended_small_scrip.nc -p ais-bedmap2 -r 2
+
+ESMF_RegridWeightGen --source  Rebesco_HF14_BedMachinev3_merged_buffered_feathering_N20_extended_small_scrip.nc \
+   -d Crane_scrip.nc --weight bed_weights.nc --method conserve --netcdf4 --dst_regional --src_regional --ignore_unmapped
+
+python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/landice/mesh_tools_li/interpolate_to_mpasli_grid.py \
+   -s /global/cfs/cdirs/fanssie/users/trhille/HiDEM_inputs/Crane/Rebesco_HF14_BedMachinev3_merged_buffered_feathering_N20_extended_small.nc \
+   -d Crane.nc -m e -w bed_weights.nc -v bedTopography
 
 # Calculate ice thickness from surface and bed topography
 ncap2 -O -s "rhoi=910.0; rhosw=1028.0; 
@@ -251,12 +320,12 @@ ncks -A -v thickness tmp.nc Crane.nc
 # Now trim ice extent to match edge of velocities dataset, which was manually defined with a geojson file.
 # This was calculated on the MALI mesh above.
 ncap2 -A -s "thickness = thickness * iceMask_2002" Crane.nc
-
-cp /global/cfs/cdirs/fanssie/users/trhille/data/Paolo_2023_melt_rates/ANT_G1920V01_IceShelfMelt.nc .
+ncap2 -A -s "where(thickness<0) thickness=0" Crane.nc
+cp /global/cfs/cdirs/m4288/users/trhille/data/Paolo_2023_melt_rates/ANT_G1920V01_IceShelfMelt.nc .
 python calculate_floating_basal_mass_bal.py
 
 # What we called thicknessUncertainty is really uncertainty in bed topography
-ncrename -v thicknessUncertainty,bedTopographyUncertainty Crane.nc
+#ncrename -v thicknessUncertainty,bedTopographyUncertainty Crane.nc
 
 # Assign a uniform surface elevation uncertainty of 39 m. This accounts for
 # 24 m RMSE in the ASTER DEM, a ~15 m uncertainty in firn air content (see
