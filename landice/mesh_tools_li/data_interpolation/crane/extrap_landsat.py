@@ -14,18 +14,19 @@ import time
 from shutil import copyfile
 
 
-dataFile = 'landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp.nc'
+dataFile = 'LE07_L1GT_217106_20021218_20200916_02_T2_X_LE07_L1GT_219106_20030202_20200916_02_T2_G0120V02_P011.nc'
 outFile = copyfile(dataFile, dataFile + '_extrap')
 data = Dataset(outFile, 'r+')
 # Get data and masks for each variable.
 # Remember that in this case, a mask value
 # of True means that the value is missing there.
-vx = data.variables["vx_masked"][:].data.ravel()
-vx_mask = np.logical_not(data.variables["vx_masked"][:].mask.ravel())
-vy = data.variables["vy_masked"][:].data.ravel()
-vy_mask = np.logical_not(data.variables["vy_masked"][:].mask.ravel())
-# Mask needs an extra speed threshold of ~1500 m/yr to remove spurious fast cells.
-spd_thresh = 4.  # m/day
+vx = data.variables["vx"][:].data.ravel()
+vx_mask = np.logical_not(data.variables["vx"][:].mask.ravel())
+vy = data.variables["vy"][:].data.ravel()
+vy_mask = np.logical_not(data.variables["vy"][:].mask.ravel())
+verr = data.variables["v_error"][:].data.ravel()
+# Mask needs an extra speed threshold of 2000 m/yr to remove spurious fast cells.
+spd_thresh = 2000.  
 mask = np.logical_and(np.logical_and(vx_mask, vy_mask), np.sqrt(vx**2. + vy**2.) < spd_thresh)
 
 x1 = data.variables["x1"][:]
@@ -48,6 +49,8 @@ interp_vx = NearestNDInterpolator(list(zip(xx[mask], yy[mask])), vx[mask])
 print('Beginning building vy interpolator')
 interp_vy = NearestNDInterpolator(list(zip(xx[mask], yy[mask])), vy[mask])
 
+print('Beginning building verr interpolator')
+interp_verr = NearestNDInterpolator(list(zip(xx[mask], yy[mask])), verr[mask])
 toc = time.perf_counter()
 print('Finished building interpolators in {:.2f} seconds'.format(toc - tic))
 
@@ -68,6 +71,15 @@ print('Extrapolation completed in {:.2f} seconds'.format(toc - tic))
 data.variables["vy"][:] = vy_extrap
 data.sync()
 del vy_extrap
+
+tic = time.perf_counter()
+print('Beginning verr extrapolation')
+verr_extrap = interp_verr(xGrid, yGrid)
+toc = time.perf_counter()
+print('Extrapolation completed in {:.2f} seconds'.format(toc - tic))
+data.variables["v_error"][:] = verr_extrap
+data.sync()
+del verr_extrap
 
 data.createVariable("mask", datatype="f", dimensions=("y","x"))
 data.variables["mask"][:] = np.reshape(mask, (np.shape(y1)[0], np.shape(x1)[0]))

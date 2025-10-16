@@ -7,37 +7,39 @@ git checkout crane_interpolation
 cd -
 
 echo $PWD
-cp /pscratch/sd/t/trhille/crane_mesh_20250925/landice/crane/mesh_gen/mesh/Crane.nc Crane.nc
+cp /global/cfs/cdirs/fanssie/MALI_input_files/Crane_200to400m_r01/crane_mesh_20250925/landice/crane/mesh_gen/mesh/Crane.nc Crane.nc
 
 # Do all edits on local copy of landsat velocity file
-cp /global/cfs/cdirs/m4288/users/trhille/data/Crane/velocities_for_trevor/landsat_both/18dec2002_20feb2003/landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp.nc .
+wget https://its-live-data.s3.amazonaws.com/velocity_image_pair/landsatOLI/v02/S60W060/LE07_L1GT_217106_20021218_20200916_02_T2_X_LE07_L1GT_219106_20030202_20200916_02_T2_G0120V02_P011.nc
 
-# remove spuriously high velocities from the landsat data
-ncap2 -A -s "x1 = x; y1 = y;" landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp.nc
+# adjust units and variable names for interpolation
+ncap2 -A -s "x1 = x; y1 = y;" LE07_L1GT_217106_20021218_20200916_02_T2_X_LE07_L1GT_219106_20030202_20200916_02_T2_G0120V02_P011.nc
 
 python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/mesh_tools/create_SCRIP_files/create_SCRIP_file_from_MPAS_mesh.py \
     -m Crane.nc -s Crane_scrip.nc
 
 python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/mesh_tools/create_SCRIP_files/create_SCRIP_file_from_planar_rectangular_grid.py \
-    -i landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp.nc \
-    -s landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp_scrip.nc -p ais-bedmap2 -r 2
+    -i LE07_L1GT_217106_20021218_20200916_02_T2_X_LE07_L1GT_219106_20030202_20200916_02_T2_G0120V02_P011.nc \
+    -s LE07_L1GT_217106_20021218_20200916_02_T2_X_LE07_L1GT_219106_20030202_20200916_02_T2_G0120V02_P011.scrip.nc -p ais-bedmap2 -r 2
 
 # Might need an interactive node to use ESMF_RegridWeightGen
-ESMF_RegridWeightGen --source landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp_scrip.nc \
+ESMF_RegridWeightGen --source LE07_L1GT_217106_20021218_20200916_02_T2_X_LE07_L1GT_219106_20030202_20200916_02_T2_G0120V02_P011.scrip.nc \
     -d Crane_scrip.nc --weight landsat_to_MPAS_weights.nc --method conserve --netcdf4 \
     --dst_regional --src_regional --ignore_unmapped
 
 
 ncap2 -A -s "observedSurfaceVelocityXLandSat = observedSurfaceVelocityX * 0.0;
              observedSurfaceVelocityYLandSat = observedSurfaceVelocityY * 0.0;
+             observedSurfaceVelocityUncertaintyLandSat = observedSurfaceVelocityY * 0.0;
              landSatMask = observedSurfaceVelocityX * 0.0" Crane.nc
 
 python extrap_landsat.py
 
 # Use conservative remapping because Landsat resolution is 30 m.
 python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/landice/mesh_tools_li/interpolate_to_mpasli_grid.py \
-   -s landsat_18dec2002_20feb2003_hsc15_htc70_inc2_3031_new_hp.nc_extrap -d Crane.nc -m e -w landsat_to_MPAS_weights.nc \
-    -v observedSurfaceVelocityXLandSat observedSurfaceVelocityYLandSat landSatMask
+   -s LE07_L1GT_217106_20021218_20200916_02_T2_X_LE07_L1GT_219106_20030202_20200916_02_T2_G0120V02_P011.nc_extrap \
+   -d Crane.nc -m e -w landsat_to_MPAS_weights.nc \
+   -v observedSurfaceVelocityXLandSat observedSurfaceVelocityYLandSat observedSurfaceVelocityUncertaintyLandSat landSatMask
 
 # Cut out a subdomain around Crane for fast interpolation
 ncks -O -d x,1750,1950 -d y,4045,4280 \
@@ -63,7 +65,9 @@ ncap2 -A -s "where(iceMask < 0.5) thickness = 0.0" Crane.nc
 conda activate gdal
 
 # Merge bed dems
-python merge_Rebesco_Huss-Farinetti_BedMachine_DEMs_extended_domain.py
+if [ ! -f Rebesco_HF14_BedMachinev3_merged_buffered_feathering_N20_extended_small.nc]; then 
+   python merge_Rebesco_Huss-Farinetti_BedMachine_DEMs_extended_domain.py
+fi
 
 # Reproject Berthier DEM to EPSG 3031
 gdalwarp -t_srs EPSG:3031 /global/cfs/cdirs/m4288/users/trhille/data/Crane/Berthier_DEMs/DEM_2002.85300894_shifted_H_V.tif \
@@ -164,8 +168,8 @@ ncks -A -v VX2009,VY2009,STDX2009,STDY2009,CNT2009 \
     antarctica_ice_velocity_2007-2009_450m_v01.0_Crane_extrap.nc \
     measures_upstream_velocities.nc
 
-ncap2 -A -s "lower_vel_bound_x = VX2001 - STDX2001; lower_vel_bound_y = VY2001 - STDY2001;
-             upper_vel_bound_x = VX2009 + STDX2009; upper_vel_bound_y = VY2009 + STDY2009;
+ncap2 -A -s "lower_vel_bound_x = VX2001; lower_vel_bound_y = VY2001;
+             upper_vel_bound_x = VX2009; upper_vel_bound_y = VY2009;
              measures_mask = (CNT2001>0 && CNT2009>0);
              vx = (VX2001 + VX2009) / 2.0;
              vy = (VY2001 + VY2009) / 2.0;
@@ -190,7 +194,7 @@ python /global/cfs/cdirs/fanssie/users/trhille/MPAS-Tools/landice/mesh_tools_li/
     -v observedSurfaceVelocityXMeasures observedSurfaceVelocityYMeasures \
        observedSurfaceVelocityUncertaintyMeasures measuresMask
 
-# Where LandSat velocities are good, use those (and assume 20% uncertainty).
+# Where LandSat velocities are good, use those with their uncertainties.
 # Everywhere else, use MEaSUREs data.
 
 ncap2 -A -s "observedSurfaceVelocityX(:,:) = 0.0;
@@ -202,13 +206,13 @@ ncap2 -A -s "observedSurfaceVelocityX(:,:) = 0.0;
                       sqrt(observedSurfaceVelocityXMeasures^2.0 + observedSurfaceVelocityYMeasures^2.0))) {
                 observedSurfaceVelocityX = observedSurfaceVelocityXLandSat;
                 observedSurfaceVelocityY = observedSurfaceVelocityYLandSat;
-                observedSurfaceVelocityUncertainty = 0.2 * sqrt(observedSurfaceVelocityXLandSat^2.0 + observedSurfaceVelocityYLandSat^2.0);
+                observedSurfaceVelocityUncertainty = observedSurfaceVelocityUncertaintyLandSat;
              };
              where(landSatMask>0.99999 &&
                    measuresMask<0.9999) {
                 observedSurfaceVelocityX = observedSurfaceVelocityXLandSat;
                 observedSurfaceVelocityY = observedSurfaceVelocityYLandSat;
-                observedSurfaceVelocityUncertainty = 0.2 * sqrt(observedSurfaceVelocityXLandSat^2.0 + observedSurfaceVelocityYLandSat^2.0);
+                observedSurfaceVelocityUncertainty = observedSurfaceVelocityUncertaintyLandSat;
              };
              where(measuresMask>0.99999 &&
                    landSatMask>0.99999 &&
