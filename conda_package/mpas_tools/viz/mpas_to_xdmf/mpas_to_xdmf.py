@@ -33,6 +33,7 @@ See Also
 """  # noqa: E501
 
 from mpas_tools.viz.mpas_to_xdmf.io import (
+    _DEFAULT_MAX_READ_BYTES,
     _convert_to_xdmf,
     _load_dataset,
     _parse_extra_dims,
@@ -123,7 +124,14 @@ class MpasToXdmf:
             xtime_var=xtime_var,
         )
 
-    def convert_to_xdmf(self, out_dir, extra_dims=None, quiet=False):
+    def convert_to_xdmf(
+        self,
+        out_dir,
+        extra_dims=None,
+        quiet=False,
+        float32=False,
+        max_read_bytes=_DEFAULT_MAX_READ_BYTES,
+    ):
         """
         Convert the loaded xarray Dataset to XDMF + HDF5 format.
 
@@ -137,6 +145,15 @@ class MpasToXdmf:
             included.
         quiet : bool, optional
             If True, suppress progress output.
+        float32 : bool, optional
+            If True, write floating-point fields in single precision, halving
+            the size of the HDF5 files (the mesh geometry stays in double
+            precision).
+        max_read_bytes : int, optional
+            Approximate limit on the number of bytes read from the input
+            dataset at a time.  Larger values allow more indices of an extra
+            dimension (e.g. ``nVertLevels``) to be read in a single pass over
+            a variable, which is faster but uses more memory.
 
         Output
         ------
@@ -154,7 +171,10 @@ class MpasToXdmf:
             ds=self.ds,
             ds_mesh=self.ds_mesh,
             out_dir=out_dir,
+            extra_dims=extra_dims,
             quiet=quiet,
+            float32=float32,
+            max_read_bytes=max_read_bytes,
         )
 
 
@@ -225,6 +245,26 @@ def main():
         action='store_true',
         help='Suppress progress output.',
     )
+    parser.add_argument(
+        '-f',
+        '--float32',
+        action='store_true',
+        help=(
+            'Write floating-point fields in single precision, halving the '
+            'size of the HDF5 files.  The mesh geometry stays in double '
+            'precision.'
+        ),
+    )
+    parser.add_argument(
+        '--max-read-gb',
+        type=float,
+        default=_DEFAULT_MAX_READ_BYTES / 1024**3,
+        help=(
+            'Approximate limit in GB on the amount of data read from the '
+            'input files at a time.  Larger values are faster but use more '
+            'memory.'
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -243,4 +283,6 @@ def main():
         out_dir=args.output_dir,
         extra_dims=extra_dims,
         quiet=args.quiet,
+        float32=args.float32,
+        max_read_bytes=int(args.max_read_gb * 1024**3),
     )
