@@ -1,8 +1,10 @@
 import glob
 import importlib.resources
+import itertools
 import os
 
 import h5py
+import numpy as np
 import xarray as xr
 from jinja2 import Template
 from tqdm import tqdm
@@ -14,6 +16,14 @@ from mpas_tools.viz.mpas_to_xdmf.geometry import (
 )
 from mpas_tools.viz.mpas_to_xdmf.mesh import _get_ds_mesh
 from mpas_tools.viz.mpas_to_xdmf.time import _set_time
+
+# Fields with extra dimensions (e.g. nVertLevels) are unwrapped into one
+# 2D field per index.  Reading each of those fields individually is very
+# slow, because a single vertical level is strided across the whole variable
+# on disk, so the entire variable has to be read once per level.  Instead we
+# read as many indices at a time as we can, capped by this many bytes so that
+# memory use stays bounded on very large meshes.
+_DEFAULT_MAX_READ_BYTES = 2 * 1024**3
 
 
 def _load_dataset(mesh_filename, time_series_filenames, variables, xtime_var):
@@ -102,7 +112,15 @@ def _load_dataset(mesh_filename, time_series_filenames, variables, xtime_var):
     return ds_mesh, ds
 
 
-def _convert_to_xdmf(ds, ds_mesh, out_dir, quiet=False):
+def _convert_to_xdmf(
+    ds,
+    ds_mesh,
+    out_dir,
+    extra_dims=None,
+    quiet=False,
+    float32=False,
+    max_read_bytes=_DEFAULT_MAX_READ_BYTES,
+):
     """
     Convert an xarray Dataset to XDMF + HDF5 format.
 
@@ -114,53 +132,89 @@ def _convert_to_xdmf(ds, ds_mesh, out_dir, quiet=False):
         The mesh dataset.
     out_dir : str
         Directory where XDMF and HDF5 files will be saved.
+    extra_dims : dict, optional
+        Dictionary mapping extra dimensions to the indices to write.
     quiet : bool, optional
         If True, suppress progress output. Default is False.
+    float32 : bool, optional
+        If True, write floating-point fields in single precision.
+    max_read_bytes : int, optional
+        Approximate limit on the number of bytes read from ``ds`` at a time.
     """
     os.makedirs(out_dir, exist_ok=True)
 
+    kwargs = dict(
+        out_dir=out_dir,
+        extra_dims=extra_dims,
+        quiet=quiet,
+        float32=float32,
+        max_read_bytes=max_read_bytes,
+    )
+
     if 'nCells' in ds.dims:
-        _convert_cells_to_xdmf(ds, ds_mesh, out_dir, quiet)
+        _convert_cells_to_xdmf(ds, ds_mesh, **kwargs)
     if 'nEdges' in ds.dims:
-        _convert_edges_to_xdmf(ds, ds_mesh, out_dir, quiet)
+        _convert_edges_to_xdmf(ds, ds_mesh, **kwargs)
     if 'nVertices' in ds.dims:
-        _convert_vertices_to_xdmf(ds, ds_mesh, out_dir, quiet)
+        _convert_vertices_to_xdmf(ds, ds_mesh, **kwargs)
 
 
-def _convert_cells_to_xdmf(ds, ds_mesh, out_dir, quiet):
+def _convert_cells_to_xdmf(ds, ds_mesh, **kwargs):
     """
     Convert cell-centered data to XDMF + HDF5 format.
     """
     ds_cell_geom = _build_cell_geometry(ds_mesh)
     cell_vars = [var for var in ds.data_vars if 'nCells' in ds[var].dims]
     ds_cells = ds[cell_vars]
-    _write_xdmf(ds_cell_geom, ds_cells, out_dir, suffix='Cells', quiet=quiet)
+    _write_xdmf(
+        ds_cell_geom, ds_cells, suffix='Cells', topo_dim='nCells', **kwargs
+    )
 
 
-def _convert_edges_to_xdmf(ds, ds_mesh, out_dir, quiet):
+def _convert_edges_to_xdmf(ds, ds_mesh, **kwargs):
     """
     Convert edge-centered data to XDMF + HDF5 format.
     """
     ds_edge_geom = _build_edge_geometry(ds_mesh)
     edge_vars = [var for var in ds.data_vars if 'nEdges' in ds[var].dims]
     ds_edges = ds[edge_vars]
-    _write_xdmf(ds_edge_geom, ds_edges, out_dir, suffix='Edges', quiet=quiet)
+    _write_xdmf(
+        ds_edge_geom, ds_edges, suffix='Edges', topo_dim='nEdges', **kwargs
+    )
 
 
-def _convert_vertices_to_xdmf(ds, ds_mesh, out_dir, quiet):
+def _convert_vertices_to_xdmf(ds, ds_mesh, **kwargs):
     """
     Convert vertex-centered data to XDMF + HDF5 format.
     """
     ds_vertex_geom = _build_vertex_geometry(ds_mesh)
     vertex_vars = [var for var in ds.data_vars if 'nVertices' in ds[var].dims]
-    vert_to_kite_map = ds_vertex_geom['vert_to_kite_map']
-    ds_vertices = ds[vertex_vars].isel(nVertices=vert_to_kite_map)
+    ds_vertices = ds[vertex_vars]
+    # each vertex is repeated once per kite; the map is applied to each field
+    # after it has been read rather than as a (much slower) indexed read
+    vert_to_kite_map = ds_vertex_geom['vert_to_kite_map'].values
     _write_xdmf(
-        ds_vertex_geom, ds_vertices, out_dir, suffix='Vertices', quiet=quiet
+        ds_vertex_geom,
+        ds_vertices,
+        suffix='Vertices',
+        topo_dim='nVertices',
+        topo_map=vert_to_kite_map,
+        **kwargs,
     )
 
 
-def _write_xdmf(ds_geom, ds_data, out_dir, suffix, quiet=False):
+def _write_xdmf(
+    ds_geom,
+    ds_data,
+    out_dir,
+    suffix,
+    topo_dim,
+    extra_dims=None,
+    topo_map=None,
+    quiet=False,
+    float32=False,
+    max_read_bytes=_DEFAULT_MAX_READ_BYTES,
+):
     """
     Write data to HDF5 and metadata to XDMF format.
 
@@ -174,55 +228,60 @@ def _write_xdmf(ds_geom, ds_data, out_dir, suffix, quiet=False):
         Directory where XDMF and HDF5 files will be saved.
     suffix : str
         Suffix to append to output filenames (e.g., 'Cells', 'Edges').
+    topo_dim : str
+        The dimension the fields are defined on (e.g. ``'nCells'``).
+    extra_dims : dict, optional
+        Dictionary mapping extra dimensions to the indices to write.  Each
+        variable is unwrapped into one field per combination of indices.
+    topo_map : numpy.ndarray, optional
+        Indices along ``topo_dim`` to map each field onto the geometry.
     quiet : bool, optional
         If True, suppress progress output. Default is False.
+    float32 : bool, optional
+        If True, write floating-point fields in single precision.
+    max_read_bytes : int, optional
+        Approximate limit on the number of bytes read from ``ds_data`` at a
+        time.
     """
     h5_basename = f'fieldsOn{suffix}.h5'
     h5_filename = os.path.join(out_dir, h5_basename)
     xdmf_filename = os.path.join(out_dir, f'fieldsOn{suffix}.xdmf')
 
+    variables_metadata = _field_metadata(ds_data, extra_dims)
+
     # Write HDF5 file
     with h5py.File(h5_filename, 'w') as h5_file:
         # Write geometry
         h5_file.create_dataset('Points', data=ds_geom['points'].values)
-        h5_file.create_dataset('Cells', data=ds_geom['cells'].values)
+        h5_file.create_dataset('Cells', data=_as_index_type(ds_geom['cells']))
 
         # Calculate total progress steps
         total_steps = sum(
-            ds_data.sizes['Time'] if 'Time' in ds_data[var].dims else 1
-            for var in ds_data.data_vars
+            ds_data.sizes['Time'] if field['has_time'] else 1
+            for field in variables_metadata
         )
 
         # Write time-varying and static data with progress bar
         if quiet:
             iterator = None
         else:
-            iterator = tqdm(
-                ds_data.data_vars, total=total_steps, desc=f'Writing {suffix}'
-            )
+            iterator = tqdm(total=total_steps, desc=f'Writing {suffix}')
         for var_name in ds_data.data_vars:
             if iterator is not None:
                 iterator.set_description(f'Processing {var_name}')
-            if 'Time' in ds_data[var_name].dims:
-                for t_idx in range(ds_data.sizes['Time']):
-                    dataset_name = f'{var_name}_t{t_idx}'
-                    da = ds_data[var_name].isel(Time=t_idx)
-                    h5_file.create_dataset(dataset_name, data=da.values)
-                    if iterator is not None:
-                        iterator.update(1)
-            else:
-                h5_file.create_dataset(var_name, data=ds_data[var_name].values)
-                if iterator is not None:
-                    iterator.update(1)
-
-    # Preprocess variable metadata for the template
-    variables_metadata = [
-        {
-            'name': var_name,
-            'has_time': 'Time' in ds_data[var_name].dims,
-        }
-        for var_name in ds_data.data_vars
-    ]
+            _write_variable(
+                h5_file=h5_file,
+                da=ds_data[var_name],
+                var_name=var_name,
+                extra_dims=extra_dims,
+                topo_dim=topo_dim,
+                topo_map=topo_map,
+                float32=float32,
+                max_read_bytes=max_read_bytes,
+                iterator=iterator,
+            )
+        if iterator is not None:
+            iterator.close()
 
     # Load XDMF template from external file
     package = 'mpas_tools.viz.mpas_to_xdmf.templates'
@@ -231,7 +290,7 @@ def _write_xdmf(ds_geom, ds_data, out_dir, suffix, quiet=False):
         xdmf_template = Template(template_file.read())
 
     # Render XDMF file
-    cells = ds_geom['cells'].values
+    cells = ds_geom['cells']
     times = ds_data['Time'].values if 'Time' in ds_data.dims else []
 
     xdmf_content = xdmf_template.render(
@@ -246,6 +305,196 @@ def _write_xdmf(ds_geom, ds_data, out_dir, suffix, quiet=False):
 
     with open(xdmf_filename, 'w') as xdmf_file:
         xdmf_file.write(xdmf_content)
+
+
+def _as_index_type(da):
+    """
+    Return the connectivity array as 32-bit integers if the indices fit,
+    halving the size of the largest static array in the HDF5 file.
+    """
+    values = da.values
+    if (
+        values.dtype.itemsize > 4
+        and values.size > 0
+        and values.max() < np.iinfo(np.int32).max
+    ):
+        values = values.astype(np.int32)
+    return values
+
+
+def _expand_extra_dims(var_name, da, extra_dims):
+    """
+    Determine the fields a variable is unwrapped into, one per combination of
+    extra-dimension indices.
+
+    Parameters
+    ----------
+    var_name : str
+        The name of the variable.
+    da : xarray.DataArray
+        The variable to unwrap.
+    extra_dims : dict or None
+        Dictionary mapping extra dimensions to the indices to write.
+
+    Returns
+    -------
+    dims : list of str
+        The extra dimensions present on ``da``, in the order given by
+        ``extra_dims``.
+    fields : list of tuple
+        A ``(name, indices)`` pair for each field, where ``indices`` gives the
+        index along each dimension in ``dims``.
+    """
+    dims = [dim for dim in (extra_dims or {}) if dim in da.dims]
+    index_lists = [extra_dims[dim] for dim in dims]
+    fields = [
+        (var_name + ''.join(f'_{index}' for index in indices), indices)
+        for indices in itertools.product(*index_lists)
+    ]
+    return dims, fields
+
+
+def _field_metadata(ds_data, extra_dims):
+    """
+    Build the list of fields to write, in the order they are written, for use
+    in the XDMF template.
+    """
+    metadata = []
+    for var_name in ds_data.data_vars:
+        da = ds_data[var_name]
+        _, fields = _expand_extra_dims(var_name, da, extra_dims)
+        has_time = 'Time' in da.dims
+        metadata.extend(
+            {'name': name, 'has_time': has_time} for name, _ in fields
+        )
+    return metadata
+
+
+def _read_group_size(da, dims, extra_dims, topo_dim, max_read_bytes):
+    """
+    Determine how many indices along the first extra dimension can be read at
+    once without exceeding ``max_read_bytes``.  At least one index is always
+    read.
+    """
+    per_index = da.sizes[topo_dim] * da.dtype.itemsize
+    for dim in dims[1:]:
+        indices = extra_dims[dim]
+        per_index *= max(indices) - min(indices) + 1
+    return max(1, int(max_read_bytes // max(per_index, 1)))
+
+
+def _write_variable(
+    h5_file,
+    da,
+    var_name,
+    extra_dims,
+    topo_dim,
+    topo_map,
+    float32,
+    max_read_bytes,
+    iterator,
+):
+    """
+    Unwrap a variable into one HDF5 dataset per combination of extra-dimension
+    indices (and per time index), reading as many indices at a time as the
+    memory budget allows.
+    """
+    dims, _ = _expand_extra_dims(var_name, da, extra_dims)
+    has_time = 'Time' in da.dims
+    time_indices = range(da.sizes['Time']) if has_time else [None]
+
+    if dims:
+        group_size = _read_group_size(
+            da, dims, extra_dims, topo_dim, max_read_bytes
+        )
+        first_indices = extra_dims[dims[0]]
+        groups = [
+            first_indices[start : start + group_size]
+            for start in range(0, len(first_indices), group_size)
+        ]
+    else:
+        groups = [None]
+
+    for t_index in time_indices:
+        da_t = da.isel(Time=t_index) if has_time else da
+        time_suffix = f'_t{t_index}' if has_time else ''
+        for group in groups:
+            block, offsets, index_lists = _read_block(
+                da_t, dims, extra_dims, group
+            )
+            _write_block(
+                h5_file=h5_file,
+                block=block,
+                dims=dims,
+                offsets=offsets,
+                index_lists=index_lists,
+                var_name=var_name,
+                time_suffix=time_suffix,
+                topo_map=topo_map,
+                float32=float32,
+                iterator=iterator,
+            )
+            # release the block before the next one is read, so that only one
+            # is ever in memory at a time
+            del block
+
+
+def _read_block(da, dims, extra_dims, group):
+    """
+    Read the smallest contiguous span of ``da`` that covers ``group`` (a set of
+    indices along ``dims[0]``) together with all the requested indices of the
+    remaining extra dimensions, in a single pass over the variable on disk.
+
+    Returns the block along with the offset of each extra dimension within it
+    and the indices that the block was read for.
+    """
+    if group is None:
+        return da.compute(), {}, []
+
+    offsets = {dims[0]: min(group)}
+    selection = {dims[0]: slice(min(group), max(group) + 1)}
+    for dim in dims[1:]:
+        indices = extra_dims[dim]
+        offsets[dim] = min(indices)
+        selection[dim] = slice(min(indices), max(indices) + 1)
+    index_lists = [group] + [extra_dims[dim] for dim in dims[1:]]
+    return da.isel(selection).compute(), offsets, index_lists
+
+
+def _write_block(
+    h5_file,
+    block,
+    dims,
+    offsets,
+    index_lists,
+    var_name,
+    time_suffix,
+    topo_map,
+    float32,
+    iterator,
+):
+    """
+    Write one HDF5 dataset per combination of extra-dimension indices in an
+    in-memory block.
+    """
+    for indices in itertools.product(*index_lists):
+        name = (
+            var_name + ''.join(f'_{index}' for index in indices) + time_suffix
+        )
+        field = block.isel(
+            {
+                dim: index - offsets[dim]
+                for dim, index in zip(dims, indices, strict=True)
+            }
+        )
+        values = field.values
+        if topo_map is not None:
+            values = values[topo_map]
+        if float32 and values.dtype.kind == 'f':
+            values = values.astype(np.float32)
+        h5_file.create_dataset(name, data=values)
+        if iterator is not None:
+            iterator.update(1)
 
 
 def _parse_extra_dims(dimension_list, ds):
@@ -342,9 +591,14 @@ def _parse_indices(index_string, dim_size):
 
 def _process_extra_dims(ds, extra_dims):
     """
-    Process extra dimensions in the dataset by ensuring all are covered,
-    unwrapping variables with extra dimensions into multiple variables with
-    basic dimensions, and applying slicing or dropping variables as needed.
+    Process extra dimensions in the dataset by ensuring all are covered and
+    dropping variables with extra dimensions for which no indices were
+    selected.
+
+    Variables that are kept retain their extra dimensions here.  They are
+    unwrapped into one field per combination of indices (with the suffix
+    ``_<index>`` for each extra dimension) as they are written, so that each
+    variable only needs to be read from disk once.
 
     Parameters
     ----------
@@ -372,23 +626,15 @@ def _process_extra_dims(ds, extra_dims):
             )
 
     if extra_dims:
-        for dim, indices in extra_dims.items():
-            if not indices:
-                # Drop variables with the given dimension if the list is empty
-                ds = ds.drop_vars(
-                    [var for var in ds.data_vars if dim in ds[var].dims]
-                )
-            else:
-                # Unwrap variables with the extra dimension
-                vars_to_unwrap = [
-                    var for var in ds.data_vars if dim in ds[var].dims
-                ]
-                for var in vars_to_unwrap:
-                    for index in indices:
-                        # Create a new variable with the suffix `_index`
-                        new_var_name = f'{var}_{index}'
-                        ds[new_var_name] = ds[var].isel({dim: index})
-                    # Drop the original variable with the extra dimension
-                    ds = ds.drop_vars(var)
+        # Drop variables with a dimension for which no indices were selected
+        vars_to_drop = {
+            var: None
+            for dim, indices in extra_dims.items()
+            if not indices
+            for var in ds.data_vars
+            if dim in ds[var].dims
+        }
+        if vars_to_drop:
+            ds = ds.drop_vars(list(vars_to_drop))
 
     return ds
