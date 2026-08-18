@@ -52,6 +52,16 @@ modified.  A diagnostic integer field ``dThicknessSource`` is also written to
 the output, flagging for each cell how its thickness change was obtained
 (0 = unchanged, 1 = directly measured, 2 = gap-filled by interpolation).
 
+If ``--dhdtWindow`` is given, the observed thickness tendency (dH/dt) and its
+uncertainty are also computed over a window of that many years centred on
+``--endYear`` and written to ``observedThicknessTendency`` and
+``observedThicknessTendencyUncertainty`` (both in m s-1).  As for the thickness
+change, grounded surface-elevation tendency is used directly while floating
+surface tendency is scaled by the flotation factor; endpoint uncertainties are
+taken from the datasets' ``height_change_rmse`` / ``height_change_err`` fields
+and propagated to the rate.  dH/dt is written only where the shifted mesh has
+ice; other cells get zero tendency and a large no-data uncertainty.
+
 NOTE: the MALI mesh must use the same EPSG:3031 projected coordinates as the
 ITS_LIVE datasets (xCell / yCell in metres).  A warning is printed if the mesh
 cell centres fall largely outside the dataset extent.
@@ -110,6 +120,17 @@ def parse_args():
                              "result to the ice extent at the target time. By "
                              "default only cells that currently contain ice "
                              "are modified.")
+    parser.add_argument("--dhdtWindow", dest="dhdtWindow", type=float,
+                        default=None,
+                        help="If set, also compute observedThicknessTendency "
+                             "(dH/dt) and its uncertainty over a window of "
+                             "this many years centred on endYear, and write "
+                             "them to the output mesh.")
+    parser.add_argument("--dhdtNoDataUncertainty",
+                        dest="dhdtNoDataUncertainty", type=float, default=1.0,
+                        help="Uncertainty [m s-1] assigned to "
+                             "observedThicknessTendency in cells lacking an "
+                             "observed dH/dt (default: 1.0)")
     return parser.parse_args()
 
 
@@ -136,6 +157,31 @@ def height_change_difference(ds, startYear, endYear):
           f"({yStart:.2f}); endYear {endYear:g} -> nearest step {iEnd} "
           f"({yEnd:.2f})")
     return hcEnd - hcStart
+
+
+def height_change_and_dt(ds, year0, year1):
+    '''Height-change difference and elapsed time between the nearest steps to
+    year0 and year1.  Returns (dHeight [m], dt_seconds, i0, i1).'''
+    i0, y0 = nearest_time_index(ds, year0)
+    i1, y1 = nearest_time_index(ds, year1)
+    hc0 = ds['height_change'].isel(time=i0).values.astype(np.float64)
+    hc1 = ds['height_change'].isel(time=i1).values.astype(np.float64)
+    days = ds['time'].values
+    dt_seconds = float(days[i1] - days[i0]) * 86400.0
+    print(f"    dh/dt window {year0:g}->{year1:g} uses steps {i0} ({y0:.2f}) "
+          f"and {i1} ({y1:.2f}); dt = {dt_seconds / (365.25 * 86400):.3f} yr")
+    return hc1 - hc0, dt_seconds, i0, i1
+
+
+def write_cell_field(mesh, name, data, units, long_name, comment):
+    '''Create (if needed) and write a (Time, nCells) double field.'''
+    if name not in mesh.variables:
+        mesh.createVariable(name, 'f8', ('Time', 'nCells'))
+    var = mesh.variables[name]
+    var.units = units
+    var.long_name = long_name
+    var.comment = comment
+    var[0, :] = data
 
 
 def interp_grid_to_mesh(field2d, xGrid, yGrid, xCell, yCell):
@@ -275,6 +321,74 @@ def main():
     print(f"Wrote dThicknessSource diagnostic field "
           f"(directly_measured {np.count_nonzero(dThkSource == 1)}, "
           f"gap_filled {np.count_nonzero(dThkSource == 2)})")
+
+    # --- Optionally compute observed thickness tendency (dH/dt) over a
+    #     window centred on endYear and write it to the output mesh. ---
+    if args.dhdtWindow is not None:
+        if args.dhdtWindow <= 0.0:
+            raise ValueError("--dhdtWindow must be positive.")
+        half = args.dhdtWindow / 2.0
+        yr0 = args.endYear - half
+        yr1 = args.endYear + half
+        print(f"Computing dH/dt over {yr0:g}-{yr1:g} "
+              f"(window {args.dhdtWindow:g} yr around endYear):")
+
+        # Grounded: thickness tendency equals surface-elevation tendency.
+        with xr.open_dataset(args.groundedFile, decode_times=False) as gds:
+            dHCg, dtG, i0g, i1g = height_change_and_dt(gds, yr0, yr1)
+            if dtG <= 0.0:
+                raise ValueError("Grounded dH/dt window collapses to a single "
+                                 "time step; widen --dhdtWindow.")
+            dhdtGridG = dHCg / dtG
+            rmse0 = gds['height_change_rmse'].isel(
+                time=i0g).values.astype(np.float64)
+            rmse1 = gds['height_change_rmse'].isel(
+                time=i1g).values.astype(np.float64)
+            errGridG = np.sqrt(rmse0 ** 2 + rmse1 ** 2) / dtG
+        dhdtG = interp_grid_to_mesh(dhdtGridG, xGrid, yGrid, xCell, yCell)
+        errG = interp_grid_to_mesh(errGridG, xGrid, yGrid, xCell, yCell)
+
+        # Floating: scale surface tendency by the flotation factor.
+        with xr.open_dataset(args.floatingFile, decode_times=False) as fds:
+            dHCf, dtF, i0f, i1f = height_change_and_dt(fds, yr0, yr1)
+            if dtF <= 0.0:
+                raise ValueError("Floating dH/dt window collapses to a single "
+                                 "time step; widen --dhdtWindow.")
+            dhdtGridF = dHCf / dtF * flotationFactor
+            # height_change_err has no time dimension
+            errH = fds['height_change_err'].values.astype(np.float64)
+            errGridF = np.sqrt(2.0) * errH / dtF * flotationFactor
+        dhdtF = interp_grid_to_mesh(dhdtGridF, xGridF, yGridF, xCell, yCell)
+        errF = interp_grid_to_mesh(errGridF, xGridF, yGridF, xCell, yCell)
+
+        # Combine (grounded precedence) and restrict to the shifted ice extent.
+        dhdt = np.where(np.isfinite(dhdtG), dhdtG, dhdtF)
+        dhdtErr = np.where(np.isfinite(errG), errG, errF)
+        dhdtDirect = np.isfinite(dhdtG) | np.isfinite(dhdtF)
+        valid = dhdtDirect & (newThickness > 0.0)
+
+        dhdt = np.where(valid, dhdt, 0.0)
+        dhdtErr = np.where(valid & np.isfinite(dhdtErr),
+                           dhdtErr, args.dhdtNoDataUncertainty)
+
+        print(f"dH/dt defined on {int(valid.sum())} of {nCells} mesh cells "
+              f"(min/max {dhdt.min():.3e}/{dhdt.max():.3e} m s-1)")
+
+        comment = (f"computed from surface-elevation change between {yr0:g} "
+                   f"and {yr1:g} (window {args.dhdtWindow:g} yr centred on "
+                   f"endYear {args.endYear:g})")
+        write_cell_field(mesh, 'observedThicknessTendency', dhdt,
+                         units='m s-1',
+                         long_name='observed thickness tendency (dH/dt)',
+                         comment=comment)
+        write_cell_field(mesh, 'observedThicknessTendencyUncertainty', dhdtErr,
+                         units='m s-1',
+                         long_name='uncertainty in observed thickness '
+                                   'tendency',
+                         comment=comment + '; no-data cells set to '
+                         f'{args.dhdtNoDataUncertainty:g} m s-1')
+        print("Wrote observedThicknessTendency and "
+              "observedThicknessTendencyUncertainty")
 
     mesh.close()
     print(f"Wrote time-shifted mesh to '{outFile}'")
