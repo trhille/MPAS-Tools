@@ -2,11 +2,11 @@
 # $ conda create --name <env> --file <this file>
 
 # Base
-python>=3.10
+python>=3.11
 cartopy
 cmocean
 dask
-geometric_features>=1.0.1,<2.0.0
+geometric_features>=1.6.3,<2.0.0
 h5py
 hdf5
 inpoly
@@ -20,7 +20,7 @@ progressbar2
 pyamg
 pyevtk
 pyproj
-python-igraph
+python-igraph>=0.10.0
 scikit-image!=0.20.0
 scipy
 shapely>=2.0,<3.0
@@ -32,6 +32,7 @@ flynt
 pip
 pre-commit
 pytest
+pyyaml
 ruff
 setuptools
 
