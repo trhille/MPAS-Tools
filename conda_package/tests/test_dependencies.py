@@ -39,8 +39,8 @@ CONDA_TO_PYPI = {
 
 PYPI_TO_CONDA = {value: key for key, value in CONDA_TO_PYPI.items()}
 
-# python is expressed as "requires-python" in pyproject.toml, so it does not
-# take part in the comparison below
+# python is expressed as "requires-python" in pyproject.toml rather than as a
+# dependency, so it is checked separately from the other packages
 PYTHON = 'python'
 
 # skip these tests when the spec files are not available, e.g. when the tests
@@ -95,6 +95,13 @@ def _pyproject_dependencies():
     with open(PYPROJECT, 'rb') as pyproject_file:
         pyproject = tomllib.load(pyproject_file)
     return _parse_specs(pyproject['project']['dependencies'])
+
+
+def _pyproject_requires_python():
+    """The python versions supported according to pyproject.toml"""
+    with open(PYPROJECT, 'rb') as pyproject_file:
+        pyproject = tomllib.load(pyproject_file)
+    return _normalize_constraints(pyproject['project']['requires-python'])
 
 
 def _dev_spec_dependencies():
@@ -176,4 +183,31 @@ def test_dev_spec_matches_recipe():
 def test_pixi_matches_recipe():
     """pixi.toml includes all the run requirements of the conda recipe"""
     problems = _compare_with_recipe(_pixi_dependencies(), 'pixi.toml')
+    assert not problems, '\n'.join(problems)
+
+
+def test_python_version_matches_pyproject():
+    """
+    The python versions in the other specs match "requires-python" from
+    pyproject.toml.  The conda recipe is allowed to leave python
+    unconstrained, since conda pins it to the version being built.
+    """
+    requires_python = _pyproject_requires_python()
+    others = {
+        'recipe/recipe.yaml': _recipe_run_requirements(),
+        'dev-spec.txt': _dev_spec_dependencies(),
+        'pixi.toml': _pixi_dependencies(),
+    }
+    problems = []
+    for filename, dependencies in others.items():
+        constraints = dependencies.get(PYTHON)
+        if constraints is None:
+            problems.append(f'{filename} does not require python')
+        elif constraints and constraints != requires_python:
+            problems.append(
+                f'{filename} constrains python to '
+                f'"{",".join(sorted(constraints))}" but the '
+                f'"requires-python" in pyproject.toml is '
+                f'"{",".join(sorted(requires_python))}"'
+            )
     assert not problems, '\n'.join(problems)
