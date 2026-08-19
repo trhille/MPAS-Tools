@@ -13,8 +13,7 @@ source:
 
 build:
   number: 0
-  skip:
-    - win
+  skip: match(python, "<3.11") or win
 
 requirements:
   build:
