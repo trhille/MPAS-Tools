@@ -9,7 +9,8 @@ from pathlib import Path
 def parse_args():
     parser = argparse.ArgumentParser(
         description=(
-            "Bump version across files (CITATION.cff, __init__.py, meta.yaml)."
+            "Bump version across files (CITATION.cff, __init__.py, "
+            "recipe.yaml)."
         )
     )
     parser.add_argument(
@@ -54,7 +55,10 @@ def bump_citation(root: Path, version: str, today: str) -> bool:
 
     # version: 1.2.1  -> version: 1.2.2
     content_new = re.sub(
-        r"(?m)^(version:\s*)(.+)\s*$", rf"\g<1>{version}", content, count=1
+        r"(?m)^(version:[^\S\n]*)[^\n]*$",
+        rf"\g<1>{version}",
+        content,
+        count=1,
     )
     # date-released: '2025-06-12' -> date-released: 'YYYY-MM-DD'
     content_new = re.sub(
@@ -98,17 +102,17 @@ def bump_init(pkg_dir: Path, version_tuple) -> bool:
     return changed
 
 
-def bump_meta(recipe_dir: Path, version: str) -> bool:
-    path = recipe_dir / "meta.yaml"
+def bump_recipe(recipe_dir: Path, version: str) -> bool:
+    path = recipe_dir / "recipe.yaml"
     content = read_text(path)
     if content is None:
         print(f"Skip (not found): {path}")
         return False
 
-    # {% set version = "1.2.1" %} -> {% set version = "1.2.2" %}
+    # In the "context" block: version: 1.2.1 -> version: 1.2.2
     content_new = re.sub(
-        r'(?m)^\{\%\s*set\s+version\s*=\s*["\']([^"\']+)["\']\s*\%\}',
-        f'{{% set version = "{version}" %}}',
+        r'(?m)^(  version:[^\S\n]*)[^\n]*$',
+        rf"\g<1>{version}",
         content,
         count=1,
     )
@@ -136,7 +140,7 @@ def main():
     changed = []
     changed.append(bump_citation(repo_root, version, today))
     changed.append(bump_init(pkg_dir, version_tuple))
-    changed.append(bump_meta(recipe_dir, version))
+    changed.append(bump_recipe(recipe_dir, version))
 
     if not any(changed):
         print("No files modified.")
