@@ -2,6 +2,12 @@
 Extract Cartesian (X, Y, Z), zonal and meridional components of an MPAS
 vector field, given the field on edge normals.
 
+On spherical meshes, the zonal and meridional components are found by
+rotating the Cartesian components into the local geographic frame at each
+cell center.  On planar meshes (``on_a_sphere = 'NO'``), no rotation is
+performed: the zonal and meridional components are the x and y components,
+respectively, matching the convention in MPAS' own reconstruction routines.
+
 This tool requires that the field 'coeffs_reconstruct' has been saved to a
 NetCDF file.  The simplest way to do this is to include the following
 stream in a forward run:
@@ -42,6 +48,14 @@ def reconstruct_variable(
     Extract Cartesian (X, Y, Z), zonal and meridional components of an MPAS
     vector field, given the field on edge normals.
 
+    On spherical meshes, the zonal and meridional components are found by
+    rotating the Cartesian components into the local geographic frame using
+    ``latCell`` and ``lonCell``.  On planar meshes (indicated by the
+    ``on_a_sphere`` attribute of ``ds_mesh`` being ``'NO'``), the zonal and
+    meridional components are the x and y components, respectively, as in
+    MPAS' own reconstruction routines.  A mesh without the ``on_a_sphere``
+    attribute is assumed to be spherical.
+
     Parameters
     ----------
     out_var_name : str
@@ -51,7 +65,9 @@ def reconstruct_variable(
         The variable at edge normals
 
     ds_mesh : xarray.Dataset
-        A dataset with the mesh variables
+        A dataset with the mesh variables (``edgesOnCell``, along with
+        ``latCell`` and ``lonCell`` if the mesh is spherical) and the
+        ``on_a_sphere`` attribute
 
     coeffs_reconstruct : xarray.DataArray
         A data array with the reconstruction coefficients
@@ -116,21 +132,33 @@ def reconstruct_variable(
         ds_out[out_name] = var
         var_cart.append(var)
 
-    lat_cell = ds_mesh.latCell
-    lon_cell = ds_mesh.lonCell
-    lat_cell.load()
-    lon_cell.load()
-
-    clat = np.cos(lat_cell)
-    slat = np.sin(lat_cell)
-    clon = np.cos(lon_cell)
-    slon = np.sin(lon_cell)
-
     if not quiet:
         print('Computing zonal and meridional components:')
 
+    if _on_a_sphere(ds_mesh):
+        lat_cell = ds_mesh.latCell
+        lon_cell = ds_mesh.lonCell
+        lat_cell.load()
+        lon_cell.load()
+
+        clat = np.cos(lat_cell)
+        slat = np.sin(lat_cell)
+        clon = np.cos(lon_cell)
+        slon = np.sin(lon_cell)
+
+        zonal = -var_cart[0] * slon + var_cart[1] * clon
+        merid = (
+            -(var_cart[0] * clon + var_cart[1] * slon) * slat
+            + var_cart[2] * clat
+        )
+    else:
+        # On a planar mesh, there is no rotation to perform: the x and y
+        # axes are the "zonal" and "meridional" directions, matching the
+        # convention in MPAS' own mpas_reconstruct_* routines.
+        zonal = var_cart[0]
+        merid = var_cart[1]
+
     out_name = f'{out_var_name}Zonal'
-    zonal = -var_cart[0] * slon + var_cart[1] * clon
     if quiet:
         zonal.compute()
     else:
@@ -140,9 +168,6 @@ def reconstruct_variable(
     ds_out[out_name] = zonal
 
     out_name = f'{out_var_name}Meridional'
-    merid = (
-        -(var_cart[0] * clon + var_cart[1] * slon) * slat + var_cart[2] * clat
-    )
     if quiet:
         merid.compute()
     else:
@@ -150,6 +175,16 @@ def reconstruct_variable(
         with ProgressBar():
             merid.compute()
     ds_out[out_name] = merid
+
+
+def _on_a_sphere(ds_mesh):
+    """
+    Whether ``ds_mesh`` is a spherical mesh, based on its ``on_a_sphere``
+    attribute.  A mesh without the attribute is assumed to be spherical.
+    """
+    if 'on_a_sphere' not in ds_mesh.attrs:
+        return True
+    return str(ds_mesh.attrs['on_a_sphere']).strip().upper() != 'NO'
 
 
 def main():
