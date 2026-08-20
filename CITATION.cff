@@ -77,7 +77,11 @@ authors:
     orcid: 'https://orcid.org/0000-0003-2962-1049'
   - given-names: Cameron
     family-names: Smith
+  - given-names: Amrapalli
+    family-names: Garanaik
+  - given-names: Divya
+    family-names: Jaganathan
 repository-code: 'https://github.com/MPAS-Dev/MPAS-Tools'
 url: 'https://mpas-dev.github.io/MPAS-Tools/master/'
-version: 2.0.0
-date-released: '2026-07-01'
+version: 2.1.0
+date-released: '2026-08-20'
