@@ -44,7 +44,7 @@ requirements:
     - python
     - cartopy
     - cmocean
-    - dask
+    - dask-core
     - geometric_features >=1.6.3,<2.0.0
     - h5py
     - inpoly
