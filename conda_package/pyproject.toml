@@ -57,6 +57,7 @@ dependencies = [
     "dask",
     "h5py",
     "inpoly",
+    "jinja2",
     "matplotlib >=3.9.0",
     "netcdf4",
     "networkx",
