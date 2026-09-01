@@ -60,7 +60,11 @@ change, grounded surface-elevation tendency is used directly while floating
 surface tendency is scaled by the flotation factor; endpoint uncertainties are
 taken from the datasets' ``height_change_rmse`` / ``height_change_err`` fields
 and propagated to the rate.  dH/dt is written only where the shifted mesh has
-ice; other cells get zero tendency and a large no-data uncertainty.
+ice; other cells get zero tendency and a large no-data uncertainty.  Near the
+altimetry pole hole the datasets hold ``height_change`` constant in time (a
+piecewise-constant fill): cells whose value is identical across every step in
+the window carry no real dH/dt information, so they are treated as no-data
+rather than a genuine zero tendency.
 
 NOTE: the MALI mesh must use the same EPSG:3031 projected coordinates as the
 ITS_LIVE datasets (xCell / yCell in metres).  A warning is printed if the mesh
@@ -70,6 +74,7 @@ Trevor Hillebrand, 2026
 '''
 
 import shutil
+import warnings
 import numpy as np
 import xarray as xr
 import cftime
@@ -164,13 +169,31 @@ def height_change_and_dt(ds, year0, year1):
     year0 and year1.  Returns (dHeight [m], dt_seconds, i0, i1).'''
     i0, y0 = nearest_time_index(ds, year0)
     i1, y1 = nearest_time_index(ds, year1)
-    hc0 = ds['height_change'].isel(time=i0).values.astype(np.float64)
-    hc1 = ds['height_change'].isel(time=i1).values.astype(np.float64)
+    win = ds['height_change'].isel(time=slice(i0, i1 + 1)).values.astype(
+        np.float64)
+    hc0 = win[0]
+    hc1 = win[-1]
     days = ds['time'].values
     dt_seconds = float(days[i1] - days[i0]) * 86400.0
     print(f"    dh/dt window {year0:g}->{year1:g} uses steps {i0} ({y0:.2f}) "
           f"and {i1} ({y1:.2f}); dt = {dt_seconds / (365.25 * 86400):.3f} yr")
-    return hc1 - hc0, dt_seconds, i0, i1
+    dHeight = hc1 - hc0
+    # Near the altimetry pole hole the datasets hold height_change constant in
+    # time (piecewise-constant fill), giving a zero windowed change while the
+    # static uncertainty stays finite. Flag only cells that are constant across
+    # every step in the window as no-data; testing just the two endpoints would
+    # also catch slow interior cells whose ~cm change is lost to the 0.01 m
+    # storage quantization.
+    fin = np.isfinite(hc0) & np.isfinite(hc1)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=RuntimeWarning)
+        held = fin & (np.nanmax(win, axis=0) == np.nanmin(win, axis=0))
+    nHeld = int(held.sum())
+    if nHeld:
+        print(f"    masked {nHeld} held-constant fill cells (constant across "
+              f"the window) as no-data")
+    dHeight[held] = np.nan
+    return dHeight, dt_seconds, i0, i1
 
 
 def write_cell_field(mesh, name, data, units, long_name, comment):
