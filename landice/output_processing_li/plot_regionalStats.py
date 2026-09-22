@@ -75,8 +75,6 @@ for r in range(nRegions):
 # and regional climate modelling. Nature Geosci 1, 106-110 (2008). https://doi.org/10.1038/ngeo102
 # Table 1: Mass balance of Antarctica in gigatonnes (10^12 kg) per year by sector for the year 2000
 # https://www.nature.com/articles/ngeo102/tables/1
-# and
-# Rignot, E., S. Jacobs, J. Mouginot, and B. Scheuchl. 2013. Ice-Shelf Melting Around Antarctica. Science 341 (6143): 266-70. https://doi.org/10.1126/science.1235798.
 #
 # UPDATED with data from:
 # Rignot, E., Mouginot, J., Scheuchl, B., van den Broeke, M., van Wessem, M. J., & Morlighem, M. (2019).
@@ -84,26 +82,35 @@ for r in range(nRegions):
 # Proceedings of the National Academy of Sciences, 116(4), 1095-1103. https://doi.org/10.1073/pnas.1812883116
 # Table 1: Ice discharge values (D09-17) for 2009-2017 period used to update outflow observations
 #
+# Ice-shelf melt rates from:
+# Rignot, E., S. Jacobs, J. Mouginot, and B. Scheuchl. 2013. Ice-Shelf Melting Around Antarctica. Science 341 (6143): 266-70. https://doi.org/10.1126/science.1235798.
+# and
+# Adusumilli, S., Fricker, H. A., Medley, B., Padman, L., & Siegfried, M. R. (2020).
+# Interannual variations in meltwater input to the Southern Ocean from Antarctic ice shelves.
+# Nature Geoscience, 13(9), 616-620. https://doi.org/10.1038/s41561-020-0616-z
+# Supplementary Table 1: Meltwater flux for 2010-2018 period
+#
 # Note: Some ISMIP6 basins combine multiple Rignot basins. Values are aggregated from individual basins.
 # input: SMB from Rignot 2008 (retained from original), outflow: D09-17 from Rignot 2019,
-# net: calculated as input-outflow, shelfMelt: from Rignot 2013
+# net: calculated as input-outflow
+# shelfMelt: [Rignot 2013 value, Adusumilli 2020 value] - both will be plotted for comparison
 ISMIP6basinInfo = {
-        'ISMIP6BasinAAp': {'name': 'Dronning Maud Land', 'input': [60,9], 'outflow': [99.1,3.8], 'net': [-39.1, 9.8], 'shelfMelt': [57.5]},
-        'ISMIP6BasinApB': {'name': 'Enderby Land', 'input': [39,5], 'outflow': [32.8,2.2], 'net': [6.2,5.5], 'shelfMelt': [24.6]},
-        'ISMIP6BasinBC': {'name': 'Amery-Lambert', 'input': [73, 10], 'outflow': [77.4,3.6], 'net': [-4.4, 10.6], 'shelfMelt': [35.5]},
-        'ISMIP6BasinCCp': {'name': 'Phillipi, Denman', 'input': [81, 13], 'outflow': [108.2,4.9], 'net':[-27.2,13.9], 'shelfMelt': [107.9]},
-        'ISMIP6BasinCpD': {'name': 'Totten', 'input': [198,37], 'outflow': [107.6,2.6], 'net': [90.4,37.1], 'shelfMelt': [102.3]},
-        'ISMIP6BasinDDp': {'name': 'Mertz', 'input': [93,14], 'outflow': [60.5,2.1], 'net': [32.5,14.2], 'shelfMelt': [22.8]},
-        'ISMIP6BasinDpE': {'name': 'Victoria Land', 'input': [20,1], 'outflow': [25.9,0.8], 'net': [-5.9,1.3], 'shelfMelt': [22.9]},
-        'ISMIP6BasinEF': {'name': 'Ross', 'input': [61+110,(10**2+7**2)**0.5], 'outflow': [136.7,6.7], 'net': [34.3,12.6], 'shelfMelt': [70.3]},
-        'ISMIP6BasinFG': {'name': 'Getz', 'input': [108,28], 'outflow': [123.7,5.0], 'net': [-15.7,28.4], 'shelfMelt': [152.9]},
-        'ISMIP6BasinGH': {'name': 'Thwaites/PIG', 'input': [177,25], 'outflow': [323.9,7.7], 'net': [-146.9,26.2], 'shelfMelt': [290.9]},
-        'ISMIP6BasinHHp': {'name': 'Bellingshausen', 'input': [51,16], 'outflow': [74.7,3.3], 'net': [-23.7,16.3], 'shelfMelt': [76.3]},
-        'ISMIP6BasinHpI': {'name': 'George VI', 'input': [71,21], 'outflow': [98.0,4.9], 'net': [-27.0,21.6], 'shelfMelt': [152.3]},
-        'ISMIP6BasinIIpp': {'name': 'Larsen A-C', 'input': [15,5], 'outflow': [18.6,2.1], 'net': [-3.6,5.4], 'shelfMelt': [32.9]},
-        'ISMIP6BasinIppJ': {'name': 'Larsen E', 'input': [8,4], 'outflow': [25.0,1.5], 'net': [-17.0,4.3], 'shelfMelt': [4.3]},
-        'ISMIP6BasinJK': {'name': 'FRIS', 'input': [93+142, (8**2+11**2)**0.5], 'outflow': [256.1,6.7], 'net': [-21.1,14.1], 'shelfMelt': [155.4]},
-        'ISMIP6BasinKA': {'name': 'Brunt-Stancomb', 'input': [42+26,(8**2+7**2)**0.5], 'outflow': [43.6,3.2], 'net':[24.4,10.9], 'shelfMelt': [10.4]}
+        'ISMIP6BasinAAp': {'name': 'Dronning Maud Land', 'input': [60,9], 'outflow': [99.1,3.8], 'net': [-39.1, 9.8], 'shelfMelt': [[57.5, None], [108.6, None]]},
+        'ISMIP6BasinApB': {'name': 'Enderby Land', 'input': [39,5], 'outflow': [32.8,2.2], 'net': [6.2,5.5], 'shelfMelt': [[24.6, None], [7.4, 7.1]]},
+        'ISMIP6BasinBC': {'name': 'Amery-Lambert', 'input': [73, 10], 'outflow': [77.4,3.6], 'net': [-4.4, 10.6], 'shelfMelt': [[35.5, None], [48.9, 39.9]]},
+        'ISMIP6BasinCCp': {'name': 'Phillipi, Denman', 'input': [81, 13], 'outflow': [108.2,4.9], 'net':[-27.2,13.9], 'shelfMelt': [[107.9, None], [56.4, 52.3]]},
+        'ISMIP6BasinCpD': {'name': 'Totten', 'input': [198,37], 'outflow': [107.6,2.6], 'net': [90.4,37.1], 'shelfMelt': [[102.3, None], [77.1, 12.1]]},
+        'ISMIP6BasinDDp': {'name': 'Mertz', 'input': [93,14], 'outflow': [60.5,2.1], 'net': [32.5,14.2], 'shelfMelt': [[22.8, None], [18.4, 8.9]]},
+        'ISMIP6BasinDpE': {'name': 'Victoria Land', 'input': [20,1], 'outflow': [25.9,0.8], 'net': [-5.9,1.3], 'shelfMelt': [[22.9, None], [14.1, 5.7]]},
+        'ISMIP6BasinEF': {'name': 'Ross', 'input': [61+110,(10**2+7**2)**0.5], 'outflow': [136.7,6.7], 'net': [34.3,12.6], 'shelfMelt': [[70.3, None], [104.3, 84.2]]},
+        'ISMIP6BasinFG': {'name': 'Getz', 'input': [108,28], 'outflow': [123.7,5.0], 'net': [-15.7,28.4], 'shelfMelt': [[152.9, None], [141.5, 41.4]]},
+        'ISMIP6BasinGH': {'name': 'Thwaites/PIG', 'input': [177,25], 'outflow': [323.9,7.7], 'net': [-146.9,26.2], 'shelfMelt': [[290.9, None], [327.9, 43.8]]},
+        'ISMIP6BasinHHp': {'name': 'Bellingshausen', 'input': [51,16], 'outflow': [74.7,3.3], 'net': [-23.7,16.3], 'shelfMelt': [[76.3, None], [191.4, 69.7]]},
+        'ISMIP6BasinHpI': {'name': 'George VI', 'input': [71,21], 'outflow': [98.0,4.9], 'net': [-27.0,21.6], 'shelfMelt': [[152.3, None], [143.3, 57.5]]},
+        'ISMIP6BasinIIpp': {'name': 'Larsen A-C', 'input': [15,5], 'outflow': [18.6,2.1], 'net': [-3.6,5.4], 'shelfMelt': [[32.9, None], [68.5, 99.6]]},
+        'ISMIP6BasinIppJ': {'name': 'Larsen E', 'input': [8,4], 'outflow': [25.0,1.5], 'net': [-17.0,4.3], 'shelfMelt': [[4.3, None], [35.3, 31.8]]},
+        'ISMIP6BasinJK': {'name': 'FRIS', 'input': [93+142, (8**2+11**2)**0.5], 'outflow': [256.1,6.7], 'net': [-21.1,14.1], 'shelfMelt': [[155.4, None], [54.8, 123.5]]},
+        'ISMIP6BasinKA': {'name': 'Brunt-Stancomb', 'input': [42+26,(8**2+7**2)**0.5], 'outflow': [43.6,3.2], 'net':[24.4,10.9], 'shelfMelt': [[10.4, None], [42.3, 40.5]]}
         }
 
 # Parse region names to more usable names, if available
@@ -242,8 +249,19 @@ for reg in range(nRegions):
    else:
       axs6.flatten()[reg].sharex(axX)
    if rNamesOrig[reg] in ISMIP6basinInfo:
-       mlt = ISMIP6basinInfo[rNamesOrig[reg]]['shelfMelt'][0]
-       axs6.flatten()[reg].plot(yr, np.ones(yr.shape)*(mlt), color='k', label='melt obs')
+       # Plot Rignot 2013 melt rate
+       mlt_rignot = ISMIP6basinInfo[rNamesOrig[reg]]['shelfMelt'][0][0]
+       axs6.flatten()[reg].plot(yr, np.ones(yr.shape)*(mlt_rignot), color='k', linestyle='-', label='Rignot 2013')
+       # Plot Adusumilli 2020 melt rate
+       mlt_adusumilli = ISMIP6basinInfo[rNamesOrig[reg]]['shelfMelt'][1]
+       if mlt_adusumilli[1] is not None:  # Has uncertainty
+           axs6.flatten()[reg].fill_between(yr,
+                                           np.ones(yr.shape)*(mlt_adusumilli[0]-mlt_adusumilli[1]),
+                                           np.ones(yr.shape)*(mlt_adusumilli[0]+mlt_adusumilli[1]),
+                                           color='b', alpha=0.2, label='Adusumilli 2020')
+           axs6.flatten()[reg].plot(yr, np.ones(yr.shape)*(mlt_adusumilli[0]), color='b', linestyle='--', linewidth=1.5)
+       else:
+           axs6.flatten()[reg].plot(yr, np.ones(yr.shape)*(mlt_adusumilli[0]), color='b', linestyle='--', label='Adusumilli 2020')
 
 # Set up unit conversion factors to be used when reading variables
 if options.units == "m3":
