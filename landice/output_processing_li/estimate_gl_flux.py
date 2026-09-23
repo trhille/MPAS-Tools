@@ -14,7 +14,7 @@ using arithmetic cell-to-edge averages for H and u.  Positive flux is from
 grounded ice into the floating shelf.
 
 Geometry variables (names can be overridden on the command line):
-    thickness, bedTopography, cellsOnEdge, dvEdge, angleEdge,
+    thickness, bedTopography, cellsOnEdge, dvEdge, xCell, yCell
 
 Velocity variables:
     observed: observedSurfaceVelocityX, observedSurfaceVelocityY
@@ -208,7 +208,8 @@ def compute_flux(
     bed: np.ndarray,
     cells_on_edge_one_based: np.ndarray,
     edge_length: np.ndarray,
-    edge_angle: np.ndarray,
+    x_cell: np.ndarray,
+    y_cell: np.ndarray,
     velocity_x_m_per_year: np.ndarray,
     velocity_y_m_per_year: np.ndarray,
     velocity_uncertainty_m_per_year: Optional[np.ndarray] = None,
@@ -220,27 +221,32 @@ def compute_flux(
 ) -> FluxResult:
     """Compute plug-flow grounding-line discharge.
 
-    ``angleEdge`` is assumed to point from cellsOnEdge[:, 0] toward
-    cellsOnEdge[:, 1], as in MPAS meshes.  The uncertainty calculation treats
-    the supplied value as an independent, isotropic 1-sigma uncertainty for
-    each cell's x and y velocity components.  Shared cells are accounted for.
+    Edge-normal directions are calculated from the vector joining the two
+    cell centers, which is normal to their shared edge on a planar MPAS Voronoi
+    mesh.  The uncertainty calculation treats the supplied value as an
+    independent, isotropic 1-sigma uncertainty for each cell's x and y
+    velocity components.  Shared cells are accounted for.
     """
     thickness = np.asarray(thickness, dtype=float)
     bed = np.asarray(bed, dtype=float)
     ux = np.asarray(velocity_x_m_per_year, dtype=float)
     uy = np.asarray(velocity_y_m_per_year, dtype=float)
+    x_cell = np.asarray(x_cell, dtype=float)
+    y_cell = np.asarray(y_cell, dtype=float)
     cells = np.asarray(cells_on_edge_one_based, dtype=np.int64)
     edge_length = np.asarray(edge_length, dtype=float)
-    edge_angle = np.asarray(edge_angle, dtype=float)
 
     n_cells = thickness.size
-    if any(a.shape != (n_cells,) for a in (bed, ux, uy)):
-        raise ValueError("thickness, bed, velocity X, and velocity Y must have the same 1-D shape.")
+    if any(a.shape != (n_cells,) for a in (bed, ux, uy, x_cell, y_cell)):
+        raise ValueError(
+            "thickness, bed, xCell, yCell, velocity X, and velocity Y must "
+            "have the same 1-D shape."
+        )
     n_edges = cells.shape[0]
     if cells.shape != (n_edges, 2):
         raise ValueError("cellsOnEdge must have shape (nEdges, 2).")
-    if edge_length.shape != (n_edges,) or edge_angle.shape != (n_edges,):
-        raise ValueError("dvEdge and angleEdge must each have length nEdges.")
+    if edge_length.shape != (n_edges,):
+        raise ValueError("dvEdge must have length nEdges.")
     if ice_density <= 0.0 or water_density <= 0.0:
         raise ValueError("Densities must be positive.")
 
@@ -278,10 +284,17 @@ def compute_flux(
 
     i = c0[edge_ids]
     j = c1[edge_ids]
-    # angleEdge normal is c0 -> c1. Reverse it where c1 is grounded.
+    # The vector from c0 to c1 is normal to their shared Voronoi edge. Reverse
+    # it where c1 is grounded so every normal points grounded -> floating.
     orientation = np.where(gf[edge_ids], 1.0, -1.0)
-    nx = orientation * np.cos(edge_angle[edge_ids])
-    ny = orientation * np.sin(edge_angle[edge_ids])
+    dx = x_cell[j] - x_cell[i]
+    dy = y_cell[j] - y_cell[i]
+    center_distance = np.hypot(dx, dy)
+    if np.any(~np.isfinite(center_distance)) or np.any(center_distance <= 0.0):
+        bad = int((~np.isfinite(center_distance) | (center_distance <= 0.0)).sum())
+        raise ValueError(f"Found {bad} grounding-line edges with invalid cell-center geometry.")
+    nx = orientation * dx / center_distance
+    ny = orientation * dy / center_distance
 
     h_edge = 0.5 * (thickness[i] + thickness[j])
     ux_edge = 0.5 * (ux[i] + ux[j])
@@ -365,7 +378,8 @@ def build_parser() -> argparse.ArgumentParser:
     names.add_argument("--bed-var", default="bedTopography")
     names.add_argument("--cells-on-edge-var", default="cellsOnEdge")
     names.add_argument("--edge-length-var", default="dvEdge")
-    names.add_argument("--edge-angle-var", default="angleEdge")
+    names.add_argument("--x-cell-var", default="xCell")
+    names.add_argument("--y-cell-var", default="yCell")
     names.add_argument("--velocity-x-var", default="observedSurfaceVelocityX")
     names.add_argument("--velocity-y-var", default="observedSurfaceVelocityY")
     names.add_argument("--uncertainty-var", default="observedSurfaceVelocityUncertainty")
@@ -440,9 +454,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             edge_length = _as_array(
                 _require_variable(ds, args.edge_length_var), args.time_index, "nEdges"
             )
-            edge_angle = _as_array(
-                _require_variable(ds, args.edge_angle_var), args.time_index, "nEdges"
-            )
+            x_cell = _as_array(_require_variable(ds, args.x_cell_var), args.time_index, "nCells")
+            y_cell = _as_array(_require_variable(ds, args.y_cell_var), args.time_index, "nCells")
 
             results: dict[str, FluxResult] = {}
             units_descriptions: dict[str, str] = {}
@@ -480,7 +493,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                     bed=bed,
                     cells_on_edge_one_based=cells_on_edge,
                     edge_length=edge_length,
-                    edge_angle=edge_angle,
+                    x_cell=x_cell,
+                    y_cell=y_cell,
                     velocity_x_m_per_year=observed_ux,
                     velocity_y_m_per_year=observed_uy,
                     velocity_uncertainty_m_per_year=uncertainty,
@@ -522,7 +536,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                     bed=bed,
                     cells_on_edge_one_based=cells_on_edge,
                     edge_length=edge_length,
-                    edge_angle=edge_angle,
+                    x_cell=x_cell,
+                    y_cell=y_cell,
                     velocity_x_m_per_year=modeled_ux,
                     velocity_y_m_per_year=modeled_uy,
                     ice_density=args.ice_density,
