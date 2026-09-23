@@ -13,7 +13,7 @@ ice-covered floating cell, the script evaluates
 using arithmetic cell-to-edge averages for H and u.  Positive flux is from
 grounded ice into the floating shelf.
 
-Geometry variables (names can be overridden on the command line):
+Geometry variables:
     thickness, bedTopography, cellsOnEdge, dvEdge, xCell, yCell
 
 Velocity variables:
@@ -22,12 +22,17 @@ Velocity variables:
 
 Optional:
     observedSurfaceVelocityUncertainty
+    a regions file containing regionEdgeMasks, regionCellMasks, and regionNames
+
+All MALI velocity fields are assumed to use Registry units of m/s.  Regional
+masks are evaluated independently and may overlap, so regional values are not
+assumed to sum to the global value.
 
 Examples:
     python estimate_gl_flux.py -f landice_grid.nc
     python estimate_gl_flux.py -f output.nc --velocity-source modeled
     python estimate_gl_flux.py -f output.nc --velocity-source both
-    python estimate_gl_flux.py -f output.nc --time-index -1 --velocity-units m/yr
+    python estimate_gl_flux.py -f output.nc -r region_masks.nc --velocity-source both
 """
 
 from __future__ import annotations
@@ -43,6 +48,10 @@ import numpy as np
 
 SECONDS_PER_YEAR = 365.0 * 24.0 * 60.0 * 60.0
 KG_PER_GT = 1.0e12
+ICE_DENSITY = 910.0
+WATER_DENSITY = 1028.0
+SEA_LEVEL = 0.0
+MIN_THICKNESS = 1.0
 
 
 @dataclass
@@ -173,34 +182,54 @@ def _read_cells_on_edge(variable: Any) -> np.ndarray:
     )
 
 
-def _units_text(variable: Any) -> str:
-    value = getattr(variable, "units", "")
-    if isinstance(value, bytes):
-        value = value.decode("utf-8", errors="replace")
-    return str(value).strip()
+def _as_region_masks(variable: Any, mesh_dim: str) -> np.ndarray:
+    """Read a mesh-by-region integer mask, regardless of dimension order."""
+    dims = tuple(variable.dimensions)
+    if mesh_dim not in dims or "nRegions" not in dims:
+        raise ValueError(
+            f"Variable {variable.name!r} must contain {mesh_dim} and nRegions; "
+            f"dimensions are {dims}."
+        )
+    data = variable[:]
+    if np.ma.isMaskedArray(data):
+        data = data.filled(0)
+    data = np.asarray(data)
+    mesh_axis = dims.index(mesh_dim)
+    region_axis = dims.index("nRegions")
+    data = np.moveaxis(data, (mesh_axis, region_axis), (0, 1))
+    if data.ndim != 2:
+        raise ValueError(f"Variable {variable.name!r} must be 2-D; shape is {data.shape}.")
+    return data != 0
 
 
-def velocity_factor_to_m_per_year(units_option: str, metadata_units: str) -> tuple[float, str]:
-    """Return multiplier converting input velocity to m/yr and a description."""
-    if units_option != "auto":
-        chosen = units_option
-    else:
-        normalized = metadata_units.lower().replace(" ", "").replace("**", "^")
-        per_second = ("s-1" in normalized or "s^-1" in normalized or "/s" in normalized)
-        per_year = any(token in normalized for token in ("yr-1", "yr^-1", "/yr", "year-1", "a-1"))
-        if per_second and not per_year:
-            chosen = "m/s"
-        elif per_year and not per_second:
-            chosen = "m/yr"
+def _read_region_names(variable: Any, n_regions: int) -> list[str]:
+    """Decode the Registry-style char regionNames(nRegions, StrLen) array."""
+    dims = tuple(variable.dimensions)
+    if "nRegions" not in dims:
+        raise ValueError(
+            f"Variable {variable.name!r} must contain nRegions; dimensions are {dims}."
+        )
+    data = variable[:]
+    if np.ma.isMaskedArray(data):
+        fill = b" " if data.dtype.kind == "S" else " "
+        data = data.filled(fill)
+    data = np.asarray(data)
+    data = np.moveaxis(data, dims.index("nRegions"), 0)
+    if data.shape[0] != n_regions:
+        raise ValueError(
+            f"regionNames has {data.shape[0]} entries but masks have {n_regions} regions."
+        )
+
+    names = []
+    for index, row in enumerate(data):
+        chars = np.asarray(row).reshape(-1)
+        if chars.dtype.kind == "S":
+            name = b"".join(chars.tolist()).decode("utf-8", errors="replace")
         else:
-            raise ValueError(
-                "Could not infer velocity units from NetCDF metadata "
-                f"{metadata_units!r}. Pass --velocity-units m/yr or m/s."
-            )
-
-    if chosen == "m/s":
-        return SECONDS_PER_YEAR, "m/s (converted to m/yr using 365 days/yr)"
-    return 1.0, "m/yr"
+            name = "".join(str(char) for char in chars.tolist())
+        name = name.split("\x00", 1)[0].strip()
+        names.append(name or f"Region {index + 1}")
+    return names
 
 
 def compute_flux(
@@ -213,13 +242,10 @@ def compute_flux(
     velocity_x_m_per_year: np.ndarray,
     velocity_y_m_per_year: np.ndarray,
     velocity_uncertainty_m_per_year: Optional[np.ndarray] = None,
-    *,
-    ice_density: float = 910.0,
-    water_density: float = 1028.0,
-    sea_level: float = 0.0,
-    min_thickness: float = 1.0,
+    edge_selector: Optional[np.ndarray] = None,
+    cell_selector: Optional[np.ndarray] = None,
 ) -> FluxResult:
-    """Compute plug-flow grounding-line discharge.
+    """Compute grounding-line discharge for a velocity field.
 
     Edge-normal directions are calculated from the vector joining the two
     cell centers, which is normal to their shared edge on a planar MPAS Voronoi
@@ -247,14 +273,24 @@ def compute_flux(
         raise ValueError("cellsOnEdge must have shape (nEdges, 2).")
     if edge_length.shape != (n_edges,):
         raise ValueError("dvEdge must have length nEdges.")
-    if ice_density <= 0.0 or water_density <= 0.0:
-        raise ValueError("Densities must be positive.")
+    if edge_selector is None:
+        edge_selector = np.ones(n_edges, dtype=bool)
+    else:
+        edge_selector = np.asarray(edge_selector, dtype=bool)
+        if edge_selector.shape != (n_edges,):
+            raise ValueError("Regional edge mask must have length nEdges.")
+    if cell_selector is None:
+        cell_selector = np.ones(n_cells, dtype=bool)
+    else:
+        cell_selector = np.asarray(cell_selector, dtype=bool)
+        if cell_selector.shape != (n_cells,):
+            raise ValueError("Regional cell mask must have length nCells.")
 
     finite_geometry = np.isfinite(thickness) & np.isfinite(bed)
-    ice = finite_geometry & (thickness > min_thickness)
-    water_depth = np.maximum(sea_level - bed, 0.0)
+    ice = finite_geometry & (thickness > MIN_THICKNESS)
+    water_depth = np.maximum(SEA_LEVEL - bed, 0.0)
     # Positive flotation residual means ice overburden exceeds ocean pressure.
-    flotation_residual = ice_density * thickness - water_density * water_depth
+    flotation_residual = ICE_DENSITY * thickness - WATER_DENSITY * water_depth
     grounded = ice & (flotation_residual > 0.0)
     floating = ice & ~grounded
 
@@ -272,12 +308,13 @@ def compute_flux(
 
     gf = interior & valid_ids & grounded[c0] & floating[c1]
     fg = interior & valid_ids & floating[c0] & grounded[c1]
-    gl = gf | fg
+    gl = (gf | fg) & edge_selector
     edge_ids = np.flatnonzero(gl)
 
     if edge_ids.size == 0:
         return FluxResult(
-            int(grounded.sum()), int(floating.sum()), 0,
+            int((grounded & cell_selector).sum()),
+            int((floating & cell_selector).sum()), 0,
             0.0, 0.0, 0.0, 0.0,
             0.0 if velocity_uncertainty_m_per_year is not None else None,
         )
@@ -300,7 +337,7 @@ def compute_flux(
     ux_edge = 0.5 * (ux[i] + ux[j])
     uy_edge = 0.5 * (uy[i] + uy[j])
     normal_velocity = ux_edge * nx + uy_edge * ny
-    mass_flux = ice_density * h_edge * normal_velocity * edge_length[edge_ids]  # kg/yr
+    mass_flux = ICE_DENSITY * h_edge * normal_velocity * edge_length[edge_ids]  # kg/yr
 
     finite_edge = (
         np.isfinite(mass_flux)
@@ -328,7 +365,7 @@ def compute_flux(
         # Q is linear in cell velocity. Aggregate coefficients first so that
         # correlations caused by one cell participating in several edges are
         # represented exactly under the independent-cell assumption.
-        k = ice_density * h_edge * edge_length[edge_ids]
+        k = ICE_DENSITY * h_edge * edge_length[edge_ids]
         coeff_x = np.zeros(n_cells, dtype=float)
         coeff_y = np.zeros(n_cells, dtype=float)
         np.add.at(coeff_x, i, 0.5 * k * nx)
@@ -339,8 +376,8 @@ def compute_flux(
         uncertainty_gt_per_year = math.sqrt(float(variance)) / KG_PER_GT
 
     return FluxResult(
-        n_grounded_cells=int(grounded.sum()),
-        n_floating_cells=int(floating.sum()),
+        n_grounded_cells=int((grounded & cell_selector).sum()),
+        n_floating_cells=int((floating & cell_selector).sum()),
         n_gl_edges=int(edge_ids.size),
         signed_gt_per_year=signed / KG_PER_GT,
         outward_gt_per_year=outward / KG_PER_GT,
@@ -356,39 +393,14 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("-f", "--file", required=True, help="MALI NetCDF input file")
+    parser.add_argument(
+        "-r", "--regions-file",
+        help="Optional NetCDF file containing regionEdgeMasks, regionCellMasks, and regionNames",
+    )
     parser.add_argument("--time-index", type=int, default=-1, help="Time record (Python indexing)")
     parser.add_argument(
         "--velocity-source", choices=("observed", "modeled", "both"), default="observed",
         help="Velocity field(s) used for the flux calculation",
-    )
-    parser.add_argument("--ice-density", type=float, default=910.0, help="Ice density (kg m-3)")
-    parser.add_argument("--water-density", type=float, default=1028.0, help="Ocean-water density (kg m-3)")
-    parser.add_argument("--sea-level", type=float, default=0.0, help="Sea-surface elevation (m)")
-    parser.add_argument(
-        "--min-thickness", type=float, default=1.0,
-        help="Cells at or below this thickness are treated as ice-free (m)",
-    )
-    parser.add_argument(
-        "--velocity-units", choices=("auto", "m/yr", "m/s"), default="auto",
-        help="Velocity units; auto reads each NetCDF units attribute",
-    )
-
-    names = parser.add_argument_group("NetCDF variable names")
-    names.add_argument("--thickness-var", default="thickness")
-    names.add_argument("--bed-var", default="bedTopography")
-    names.add_argument("--cells-on-edge-var", default="cellsOnEdge")
-    names.add_argument("--edge-length-var", default="dvEdge")
-    names.add_argument("--x-cell-var", default="xCell")
-    names.add_argument("--y-cell-var", default="yCell")
-    names.add_argument("--velocity-x-var", default="observedSurfaceVelocityX")
-    names.add_argument("--velocity-y-var", default="observedSurfaceVelocityY")
-    names.add_argument("--uncertainty-var", default="observedSurfaceVelocityUncertainty")
-    names.add_argument("--modeled-velocity-x-var", default="uReconstructX")
-    names.add_argument("--modeled-velocity-y-var", default="uReconstructY")
-    names.add_argument("--layer-fractions-var", default="layerThicknessFractions")
-    names.add_argument(
-        "--no-uncertainty", action="store_true",
-        help="Do not read or propagate the observed-velocity uncertainty",
     )
     return parser
 
@@ -400,28 +412,9 @@ def _require_variable(dataset: Any, name: str) -> Any:
     return dataset.variables[name]
 
 
-def _convert_velocity_pair_to_m_per_year(
-    ux: np.ndarray,
-    uy: np.ndarray,
-    ux_variable: Any,
-    uy_variable: Any,
-    units_option: str,
-) -> tuple[np.ndarray, np.ndarray, str]:
-    """Convert a pair of velocity components using their metadata or an override."""
-    x_units = _units_text(ux_variable)
-    y_units = _units_text(uy_variable)
-    x_factor, description = velocity_factor_to_m_per_year(units_option, x_units)
-    y_factor, _ = velocity_factor_to_m_per_year(units_option, y_units)
-    if y_factor != x_factor:
-        raise ValueError(
-            f"Velocity component units are incompatible: X={x_units!r}, Y={y_units!r}."
-        )
-    return ux * x_factor, uy * y_factor, description
-
-
-def _print_result(label: str, result: FluxResult, units_description: str) -> None:
+def _print_result(label: str, result: FluxResult) -> None:
     print(f"\n{label} velocity")
-    print(f"  Input velocity units:         {units_description}")
+    print("  Input velocity units:         m/s (converted to m/yr using 365 days/yr)")
     print(f"  Grounded ice cells:           {result.n_grounded_cells}")
     print(f"  Floating ice cells:           {result.n_floating_cells}")
     print(f"  Grounding-line edges:         {result.n_gl_edges}")
@@ -432,6 +425,37 @@ def _print_result(label: str, result: FluxResult, units_description: str) -> Non
     if result.uncertainty_gt_per_year is not None:
         print(f"  Approx. 1-sigma uncertainty:  {result.uncertainty_gt_per_year:.6g} Gt/yr")
         print("    (Assumes independent cells and isotropic component uncertainties.)")
+
+
+def _print_regional_results(
+    label: str,
+    names: list[str],
+    results: list[FluxResult],
+) -> None:
+    """Print compact regional grounding-line metrics."""
+    include_uncertainty = any(result.uncertainty_gt_per_year is not None for result in results)
+    print(f"\nRegional metrics: {label} velocity")
+    header = (
+        f"  {'Region':<28} {'Grounded':>10} {'Floating':>10} {'GL edges':>9} "
+        f"{'Signed':>12} {'Outward':>12} {'Inward':>12} {'Absolute':>12}"
+    )
+    if include_uncertainty:
+        header += f" {'1-sigma':>12}"
+    print(header)
+    print(f"  {'':<28} {'cells':>10} {'cells':>10} {'':>9} "
+          f"{'Gt/yr':>12} {'Gt/yr':>12} {'Gt/yr':>12} {'Gt/yr':>12}"
+          + (f" {'Gt/yr':>12}" if include_uncertainty else ""))
+    for name, result in zip(names, results):
+        row = (
+            f"  {name[:28]:<28} {result.n_grounded_cells:10d} "
+            f"{result.n_floating_cells:10d} {result.n_gl_edges:9d} "
+            f"{result.signed_gt_per_year:12.5g} {result.outward_gt_per_year:12.5g} "
+            f"{result.inward_gt_per_year:12.5g} {result.absolute_gt_per_year:12.5g}"
+        )
+        if include_uncertainty:
+            sigma = result.uncertainty_gt_per_year
+            row += f" {sigma:12.5g}" if sigma is not None else f" {'--':>12}"
+        print(row)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -448,65 +472,108 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     try:
         with Dataset(args.file, "r") as ds:
-            thickness = _as_array(_require_variable(ds, args.thickness_var), args.time_index, "nCells")
-            bed = _as_array(_require_variable(ds, args.bed_var), args.time_index, "nCells")
-            cells_on_edge = _read_cells_on_edge(_require_variable(ds, args.cells_on_edge_var))
+            thickness = _as_array(_require_variable(ds, "thickness"), args.time_index, "nCells")
+            bed = _as_array(_require_variable(ds, "bedTopography"), args.time_index, "nCells")
+            cells_on_edge = _read_cells_on_edge(_require_variable(ds, "cellsOnEdge"))
             edge_length = _as_array(
-                _require_variable(ds, args.edge_length_var), args.time_index, "nEdges"
+                _require_variable(ds, "dvEdge"), args.time_index, "nEdges"
             )
-            x_cell = _as_array(_require_variable(ds, args.x_cell_var), args.time_index, "nCells")
-            y_cell = _as_array(_require_variable(ds, args.y_cell_var), args.time_index, "nCells")
+            x_cell = _as_array(_require_variable(ds, "xCell"), args.time_index, "nCells")
+            y_cell = _as_array(_require_variable(ds, "yCell"), args.time_index, "nCells")
 
             results: dict[str, FluxResult] = {}
-            units_descriptions: dict[str, str] = {}
+            regional_results: dict[str, list[FluxResult]] = {}
 
-            if args.velocity_source in ("observed", "both"):
-                observed_ux_var = _require_variable(ds, args.velocity_x_var)
-                observed_uy_var = _require_variable(ds, args.velocity_y_var)
-                observed_ux = _as_array(observed_ux_var, args.time_index, "nCells")
-                observed_uy = _as_array(observed_uy_var, args.time_index, "nCells")
-                observed_ux, observed_uy, units_descriptions["observed"] = (
-                    _convert_velocity_pair_to_m_per_year(
-                        observed_ux, observed_uy, observed_ux_var, observed_uy_var,
-                        args.velocity_units,
+            region_names: list[str] = []
+            region_edge_masks: Optional[np.ndarray] = None
+            region_cell_masks: Optional[np.ndarray] = None
+            if args.regions_file is not None:
+                with Dataset(args.regions_file, "r") as region_ds:
+                    region_edge_masks = _as_region_masks(
+                        _require_variable(region_ds, "regionEdgeMasks"), "nEdges"
                     )
-                )
-
-                uncertainty = None
-                if not args.no_uncertainty:
-                    if args.uncertainty_var in ds.variables:
-                        uncertainty_var = ds.variables[args.uncertainty_var]
-                        uncertainty = _as_array(uncertainty_var, args.time_index, "nCells")
-                        uncertainty_factor, _ = velocity_factor_to_m_per_year(
-                            args.velocity_units, _units_text(uncertainty_var)
+                    region_cell_masks = _as_region_masks(
+                        _require_variable(region_ds, "regionCellMasks"), "nCells"
+                    )
+                    if region_edge_masks.shape[0] != edge_length.size:
+                        raise ValueError(
+                            f"Region file has {region_edge_masks.shape[0]} edges, but "
+                            f"the MALI file has {edge_length.size}."
                         )
-                        uncertainty *= uncertainty_factor
-                    else:
-                        print(
-                            f"WARNING: {args.uncertainty_var!r} is absent; "
-                            "continuing without observed-velocity uncertainty.",
-                            file=sys.stderr,
+                    if region_cell_masks.shape[0] != thickness.size:
+                        raise ValueError(
+                            f"Region file has {region_cell_masks.shape[0]} cells, but "
+                            f"the MALI file has {thickness.size}."
                         )
+                    if region_edge_masks.shape[1] != region_cell_masks.shape[1]:
+                        raise ValueError(
+                            "regionEdgeMasks and regionCellMasks contain different "
+                            "numbers of regions."
+                        )
+                    region_names = _read_region_names(
+                        _require_variable(region_ds, "regionNames"),
+                        region_edge_masks.shape[1],
+                    )
 
-                results["observed"] = compute_flux(
+            def calculate_metrics(
+                ux: np.ndarray,
+                uy: np.ndarray,
+                uncertainty: Optional[np.ndarray] = None,
+            ) -> tuple[FluxResult, list[FluxResult]]:
+                common = dict(
                     thickness=thickness,
                     bed=bed,
                     cells_on_edge_one_based=cells_on_edge,
                     edge_length=edge_length,
                     x_cell=x_cell,
                     y_cell=y_cell,
-                    velocity_x_m_per_year=observed_ux,
-                    velocity_y_m_per_year=observed_uy,
+                    velocity_x_m_per_year=ux,
+                    velocity_y_m_per_year=uy,
                     velocity_uncertainty_m_per_year=uncertainty,
-                    ice_density=args.ice_density,
-                    water_density=args.water_density,
-                    sea_level=args.sea_level,
-                    min_thickness=args.min_thickness,
+                )
+                global_result = compute_flux(**common)
+                region_values = []
+                if region_edge_masks is not None and region_cell_masks is not None:
+                    for region_index in range(region_edge_masks.shape[1]):
+                        region_values.append(
+                            compute_flux(
+                                **common,
+                                edge_selector=region_edge_masks[:, region_index],
+                                cell_selector=region_cell_masks[:, region_index],
+                            )
+                        )
+                return global_result, region_values
+
+            if args.velocity_source in ("observed", "both"):
+                observed_ux_var = _require_variable(ds, "observedSurfaceVelocityX")
+                observed_uy_var = _require_variable(ds, "observedSurfaceVelocityY")
+                observed_ux = _as_array(observed_ux_var, args.time_index, "nCells")
+                observed_uy = _as_array(observed_uy_var, args.time_index, "nCells")
+                observed_ux *= SECONDS_PER_YEAR
+                observed_uy *= SECONDS_PER_YEAR
+
+                uncertainty = None
+                if "observedSurfaceVelocityUncertainty" in ds.variables:
+                    uncertainty = _as_array(
+                        ds.variables["observedSurfaceVelocityUncertainty"],
+                        args.time_index,
+                        "nCells",
+                    )
+                    uncertainty *= SECONDS_PER_YEAR
+                else:
+                    print(
+                        "WARNING: 'observedSurfaceVelocityUncertainty' is absent; "
+                        "continuing without observed-velocity uncertainty.",
+                        file=sys.stderr,
+                    )
+
+                results["observed"], regional_results["observed"] = calculate_metrics(
+                    observed_ux, observed_uy, uncertainty
                 )
 
             if args.velocity_source in ("modeled", "both"):
-                modeled_ux_var = _require_variable(ds, args.modeled_velocity_x_var)
-                modeled_uy_var = _require_variable(ds, args.modeled_velocity_y_var)
+                modeled_ux_var = _require_variable(ds, "uReconstructX")
+                modeled_uy_var = _require_variable(ds, "uReconstructY")
                 modeled_ux_interfaces = _as_cell_interface_array(
                     modeled_ux_var, args.time_index
                 )
@@ -519,42 +586,38 @@ def main(argv: Optional[list[str]] = None) -> int:
                         f"{modeled_ux_interfaces.shape} and {modeled_uy_interfaces.shape}."
                     )
                 layer_fractions = _as_array(
-                    _require_variable(ds, args.layer_fractions_var),
+                    _require_variable(ds, "layerThicknessFractions"),
                     args.time_index,
                     "nVertLevels",
                 )
                 modeled_ux = depth_average_velocity(modeled_ux_interfaces, layer_fractions)
                 modeled_uy = depth_average_velocity(modeled_uy_interfaces, layer_fractions)
-                modeled_ux, modeled_uy, units_descriptions["modeled"] = (
-                    _convert_velocity_pair_to_m_per_year(
-                        modeled_ux, modeled_uy, modeled_ux_var, modeled_uy_var,
-                        args.velocity_units,
-                    )
-                )
-                results["modeled"] = compute_flux(
-                    thickness=thickness,
-                    bed=bed,
-                    cells_on_edge_one_based=cells_on_edge,
-                    edge_length=edge_length,
-                    x_cell=x_cell,
-                    y_cell=y_cell,
-                    velocity_x_m_per_year=modeled_ux,
-                    velocity_y_m_per_year=modeled_uy,
-                    ice_density=args.ice_density,
-                    water_density=args.water_density,
-                    sea_level=args.sea_level,
-                    min_thickness=args.min_thickness,
+                modeled_ux *= SECONDS_PER_YEAR
+                modeled_uy *= SECONDS_PER_YEAR
+                results["modeled"], regional_results["modeled"] = calculate_metrics(
+                    modeled_ux, modeled_uy
                 )
     except (KeyError, ValueError, IndexError, OSError, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
     print(f"Input file: {args.file}")
+    if args.regions_file is not None:
+        print(f"Regions file: {args.regions_file}")
+        print("Regional masks are evaluated independently and may overlap.")
     print(f"Time index: {args.time_index}")
     if "observed" in results:
-        _print_result("Observed surface (plug-flow)", results["observed"], units_descriptions["observed"])
+        _print_result("Observed surface (plug-flow)", results["observed"])
+        if region_names:
+            _print_regional_results(
+                "Observed surface (plug-flow)", region_names, regional_results["observed"]
+            )
     if "modeled" in results:
-        _print_result("Modeled depth-averaged", results["modeled"], units_descriptions["modeled"])
+        _print_result("Modeled depth-averaged", results["modeled"])
+        if region_names:
+            _print_regional_results(
+                "Modeled depth-averaged", region_names, regional_results["modeled"]
+            )
     if "observed" in results and "modeled" in results:
         observed_flux = results["observed"].signed_gt_per_year
         modeled_flux = results["modeled"].signed_gt_per_year
@@ -563,6 +626,18 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"  Signed-flux difference:      {difference:.6g} Gt/yr")
         if observed_flux != 0.0:
             print(f"  Relative difference:         {100.0 * difference / observed_flux:.6g}%")
+        if region_names:
+            print("\nRegional modeled-minus-observed signed flux")
+            print(f"  {'Region':<28} {'Difference (Gt/yr)':>20} {'Relative':>12}")
+            for name, observed, modeled in zip(
+                region_names, regional_results["observed"], regional_results["modeled"]
+            ):
+                regional_difference = modeled.signed_gt_per_year - observed.signed_gt_per_year
+                relative = (
+                    f"{100.0 * regional_difference / observed.signed_gt_per_year:.5g}%"
+                    if observed.signed_gt_per_year != 0.0 else "--"
+                )
+                print(f"  {name[:28]:<28} {regional_difference:20.6g} {relative:>12}")
     print("Positive signed discharge is from grounded ice toward floating ice.")
     return 0
 
