@@ -678,6 +678,9 @@ parser.add_argument("-u", dest="units",
 parser.add_argument("-n", dest="fileRegionNames",
                     help="region name filename. If not specified, will attempt to read region names from file 1.",
                     metavar="FILENAME")
+parser.add_argument("-s", "--save-file", dest="saveFile",
+                    help="file name prefix to save png files", default=None,
+                    metavar="FILENAME")
 
 # New dataset options
 parser.add_argument("--ice-sheet", dest="iceSheet", choices=['antarctica', 'greenland'],
@@ -1316,4 +1319,11 @@ fig3.tight_layout()
 fig4.tight_layout()
 fig5.tight_layout()
 fig6.tight_layout()
+if options.saveFile is not None:
+    fig1.savefig(f"{options.saveFile}_mass_summary.png", dpi=400, bbox_inches='tight')
+    fig2.savefig(f"{options.saveFile}_grounded_mass.png", dpi=400, bbox_inches='tight')
+    fig3.savefig(f"{options.saveFile}_floating_mass.png", dpi=400, bbox_inches='tight')
+    fig4.savefig(f"{options.saveFile}_area.png", dpi=400, bbox_inches='tight')
+    fig5.savefig(f"{options.saveFile}_regional_contributions.png", dpi=400, bbox_inches='tight')
+    fig6.savefig(f"{options.saveFile}_melt_rate.png", dpi=400, bbox_inches='tight')
 plt.show()
